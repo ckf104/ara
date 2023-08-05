@@ -6,8 +6,7 @@ filesets:
     rtl:
         file_type: systemVerilogSource
         files:
-            - fpga/src/xcvu9p.svh
-            - fpga/src/xcu280.svh
+            - fpga/src/genesys2.svh
             - hardware/deps/axi/src/axi_pkg.sv
             - hardware/deps/axi/src/axi_intf.sv
             - hardware/deps/axi/include/axi/assign.svh: {is_include_file: true, include_path: hardware/deps/axi/include}
@@ -130,8 +129,10 @@ filesets:
             - hardware/deps/cva6/src/cache_subsystem/wt_dcache.sv
             - hardware/deps/cva6/src/cache_subsystem/std_nbdcache.sv
             - hardware/deps/cva6/src/cache_subsystem/miss_handler.sv
-            - hardware/deps/cva6/src/clint/axi_lite_interface.sv
-            - hardware/deps/cva6/src/clint/clint.sv
+            - fpga/clint/axi_lite_interface.sv
+            - fpga/clint/clint.sv
+            #- hardware/deps/cva6/src/clint/axi_lite_interface.sv
+            #- hardware/deps/cva6/src/clint/clint.sv
             - hardware/deps/cva6/fpga/src/axi2apb/src/axi2apb_wrap.sv
             - hardware/deps/cva6/fpga/src/axi2apb/src/axi2apb.sv
             - hardware/deps/cva6/fpga/src/axi2apb/src/axi2apb_64_32.sv
@@ -185,39 +186,39 @@ filesets:
             - hardware/deps/cva6/src/riscv-dbg/src/dm_top.sv
             - hardware/deps/cva6/src/riscv-dbg/debug_rom/debug_rom.sv
             - hardware/deps/cva6/src/register_interface/src/apb_to_reg.sv
-            - hardware/deps/cva6/src/common_cells/src/deprecated/generic_fifo.sv
-            - hardware/deps/cva6/src/common_cells/src/deprecated/pulp_sync.sv
-            - hardware/deps/cva6/src/common_cells/src/deprecated/find_first_one.sv
-            - hardware/deps/cva6/src/common_cells/src/rstgen_bypass.sv
-            - hardware/deps/cva6/src/common_cells/src/rstgen.sv
-            - hardware/deps/cva6/src/common_cells/src/stream_mux.sv
-            - hardware/deps/cva6/src/common_cells/src/stream_demux.sv
-            - hardware/deps/cva6/src/common_cells/src/stream_arbiter.sv
-            - hardware/deps/cva6/src/common_cells/src/stream_arbiter_flushable.sv
+            #- hardware/deps/cva6/src/common_cells/src/deprecated/generic_fifo.sv
+            #- hardware/deps/cva6/src/common_cells/src/deprecated/pulp_sync.sv
+            #- hardware/deps/cva6/src/common_cells/src/deprecated/find_first_one.sv
+            #- hardware/deps/cva6/src/common_cells/src/rstgen_bypass.sv
+            #- hardware/deps/cva6/src/common_cells/src/rstgen.sv
+            #- hardware/deps/cva6/src/common_cells/src/stream_mux.sv
+            #- hardware/deps/cva6/src/common_cells/src/stream_demux.sv
+            #- hardware/deps/cva6/src/common_cells/src/stream_arbiter.sv
+            #- hardware/deps/cva6/src/common_cells/src/stream_arbiter_flushable.sv
             - hardware/deps/cva6/src/util/axi_master_connect.sv
             - hardware/deps/cva6/src/util/axi_slave_connect.sv
             - hardware/deps/cva6/src/util/axi_master_connect_rev.sv
             - hardware/deps/cva6/src/util/axi_slave_connect_rev.sv
             - hardware/deps/cva6/src/util/instr_tracer_if.sv
             - hardware/deps/cva6/src/fpga-support/rtl/SyncSpRamBeNx64.sv
-            - hardware/deps/cva6/src/common_cells/src/popcount.sv
-            - hardware/deps/cva6/src/common_cells/src/unread.sv
-            - hardware/deps/cva6/src/common_cells/src/cdc_2phase.sv
-            - hardware/deps/cva6/src/common_cells/src/spill_register.sv
-            - hardware/deps/cva6/src/common_cells/src/edge_detect.sv
-            - hardware/deps/cva6/src/common_cells/src/fifo_v3.sv
-            - hardware/deps/cva6/src/common_cells/src/deprecated/fifo_v2.sv
-            - hardware/deps/cva6/src/common_cells/src/deprecated/fifo_v1.sv
-            - hardware/deps/cva6/src/common_cells/src/lzc.sv
-            - hardware/deps/cva6/src/common_cells/src/rr_arb_tree.sv
-            - hardware/deps/cva6/src/common_cells/src/deprecated/rrarbiter.sv
-            - hardware/deps/cva6/src/common_cells/src/stream_delay.sv
-            - hardware/deps/cva6/src/common_cells/src/lfsr.sv
-            - hardware/deps/cva6/src/common_cells/src/lfsr_8bit.sv
-            - hardware/deps/cva6/src/common_cells/src/lfsr_16bit.sv
-            - hardware/deps/cva6/src/common_cells/src/counter.sv
-            - hardware/deps/cva6/src/common_cells/src/shift_reg.sv
-            - hardware/deps/cva6/src/common_cells/src/exp_backoff.sv
+            #- hardware/deps/cva6/src/common_cells/src/popcount.sv
+            #- hardware/deps/cva6/src/common_cells/src/unread.sv
+            #- hardware/deps/cva6/src/common_cells/src/cdc_2phase.sv
+            #- hardware/deps/cva6/src/common_cells/src/spill_register.sv
+            #- hardware/deps/cva6/src/common_cells/src/edge_detect.sv
+            #- hardware/deps/cva6/src/common_cells/src/fifo_v3.sv
+            #- hardware/deps/cva6/src/common_cells/src/deprecated/fifo_v2.sv
+            #- hardware/deps/cva6/src/common_cells/src/deprecated/fifo_v1.sv
+            #- hardware/deps/cva6/src/common_cells/src/lzc.sv
+            #- hardware/deps/cva6/src/common_cells/src/rr_arb_tree.sv   additional FairArb parameter in 1.22.1
+            #- hardware/deps/cva6/src/common_cells/src/deprecated/rrarbiter.sv
+            #- hardware/deps/cva6/src/common_cells/src/stream_delay.sv
+            #- hardware/deps/cva6/src/common_cells/src/lfsr.sv
+            #- hardware/deps/cva6/src/common_cells/src/lfsr_8bit.sv
+            #- hardware/deps/cva6/src/common_cells/src/lfsr_16bit.sv
+            #- hardware/deps/cva6/src/common_cells/src/counter.sv
+            #- hardware/deps/cva6/src/common_cells/src/shift_reg.sv
+            #- hardware/deps/cva6/src/common_cells/src/exp_backoff.sv
             - hardware/deps/cva6/src/tech_cells_generic/src/cluster_clock_inverter.sv
             - hardware/deps/cva6/src/tech_cells_generic/src/pulp_clock_mux2.sv
             - hardware/deps/cva6/src/util/sram.sv
@@ -268,8 +269,9 @@ filesets:
             - hardware/src/lane/vector_fus_stage.sv
             - hardware/src/lane/lane.sv
             - hardware/src/ara.sv
-            - hardware/src/ara_system.sv
-            - hardware/src/ara_soc.sv
+            - fpga/src/ara_system_with_intr.sv
+            #- hardware/src/ara_system.sv
+            #- hardware/src/ara_soc.sv
         depend:
             - pulp-platform.org::common_cells
 
@@ -296,6 +298,12 @@ filesets:
             - fpga/constraints/ara.xdc: {file_type: xdc}
             - fpga/constraints/xcu280.xdc: {file_type: xdc}
             - fpga/src/xilinx_ara_soc.sv: {file_type: systemVerilogSource}
+    genesys2:
+        files: 
+            - fpga/constraints/ara.xdc: {file_type: xdc}
+            - fpga/constraints/genesys2.xdc: {file_type: xdc}
+            - fpga/src/xilinx_ara_soc.sv: {file_type: systemVerilogSource}
+            - fpga/scripts/genesys2-ip.tcl: {file_type: tclSource}
 
     svtb:
         file_type: systemVerilogSource
@@ -344,6 +352,14 @@ targets:
         tools:
           vivado:
             part: xcu280-fsvh2892-2l-e
+    synth-genesys2:
+        <<: *synth
+        description: Synthesize the design for an FPGA board
+        filesets_append:
+            - genesys2
+        tools:
+          vivado:
+            part: xc7k325tffg900-2        
 
 parameters:
     PRELOAD:
