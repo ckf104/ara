@@ -1,4 +1,5 @@
 # create many xilinx IP required by project
+set FPGA_DIR [get_property DIRECTORY [current_project]]/../../../fpga
 
 # clock wizard ip
 create_ip -name clk_wiz -vendor xilinx.com -library ip -version 6.0 -module_name xlnx_clk_gen
@@ -209,5 +210,7 @@ set_property -dict [list \
   CONFIG.SYS_CLK_I.INSERT_VIP {0} \
   CONFIG.S_AXI.INSERT_VIP {0} \
   CONFIG.S_AXI_CTRL.INSERT_VIP {0} \
-  CONFIG.XML_INPUT_FILE [get_property DIRECTORY [current_project]]/../../../fpga/constraints/mig_genesys2.prj \
+  CONFIG.XML_INPUT_FILE $FPGA_DIR/constraints/mig_genesys2.prj \
 ] [get_ips xlnx_mig_7_ddr3]
+
+set_property STEPS.WRITE_BITSTREAM.TCL.POST $FPGA_DIR/scripts/write_cfgmem.tcl [get_runs impl_1]
