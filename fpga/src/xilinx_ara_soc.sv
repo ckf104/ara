@@ -918,8 +918,8 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .AXI_USER_WIDTH ( AxiUserWidth       )
   ) mem_bus();
 
-  AXI_ASSIGN_FROM_REQ(mem_bus, periph_narrow_axi_req[ROM]);
-  AXI_ASSIGN_TO_RESP(periph_narrow_axi_resp[ROM], mem_bus);
+  `AXI_ASSIGN_FROM_REQ(mem_bus, periph_narrow_axi_req[ROM]);
+  `AXI_ASSIGN_TO_RESP(periph_narrow_axi_resp[ROM], mem_bus);
 
   axi2mem #(
     .AXI_ID_WIDTH   ( AxiIdWidth         ),
@@ -1000,8 +1000,8 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .AXI_USER_WIDTH ( AxiUserWidth       )
   ) ddr3();
 
-  AXI_ASSIGN_FROM_REQ(riscv_atop, periph_narrow_axi_req[DRAM]);
-  AXI_ASSIGN_TO_RESP(periph_narrow_axi_resp[DRAM], riscv_atop);
+  `AXI_ASSIGN_FROM_REQ(riscv_atop, periph_narrow_axi_req[DRAM]);
+  `AXI_ASSIGN_TO_RESP(periph_narrow_axi_resp[DRAM], riscv_atop);
 
   axi_riscv_atomics_wrap #(
     .AXI_ADDR_WIDTH     ( AxiAddrWidth       ),
