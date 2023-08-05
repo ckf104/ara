@@ -269,6 +269,7 @@ filesets:
             - hardware/src/lane/vector_fus_stage.sv
             - hardware/src/lane/lane.sv
             - hardware/src/ara.sv
+            - hardware/deps/cva6/fpga/src/bootrom/bootrom.sv
             - fpga/src/ara_system_with_intr.sv
             #- hardware/src/ara_system.sv
             #- hardware/src/ara_soc.sv
