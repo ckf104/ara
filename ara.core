@@ -13,7 +13,7 @@ filesets:
             - hardware/deps/axi/include/axi/typedef.svh: {is_include_file: true, include_path: hardware/deps/axi/include}
             - hardware/deps/axi/src/axi_xbar.sv
             - hardware/deps/axi/src/axi_atop_filter.sv
-            - hardware/deps/axi/src/axi_dw_converter.sv
+            #- hardware/deps/axi/src/axi_dw_converter.sv
             - hardware/deps/axi/src/axi_to_axi_lite.sv
             - hardware/deps/axi/src/axi_lite_regs.sv
             - hardware/deps/axi/src/axi_burst_splitter.sv
@@ -25,7 +25,7 @@ filesets:
             - hardware/deps/axi/src/axi_cdc.sv
             - hardware/deps/axi/src/axi_cdc_dst.sv
             - hardware/deps/axi/src/axi_cdc_src.sv
-            - hardware/deps/axi/src/axi_cut.sv
+            #- hardware/deps/axi/src/axi_cut.sv
             - hardware/deps/axi/src/axi_delayer.sv
             - hardware/deps/axi/src/axi_dw_converter.sv
             - hardware/deps/axi/src/axi_id_prepend.sv
