@@ -266,6 +266,7 @@ filesets:
             - hardware/src/vlsu/vlsu.sv
             - hardware/src/lane/vector_fus_stage.sv
             - hardware/src/lane/lane.sv
+            - hardware/deps/cva6/fpga/src/bootrom/bootrom.sv
             - hardware/src/ara.sv
             - hardware/src/ara_system.sv
             - hardware/src/ara_soc.sv
