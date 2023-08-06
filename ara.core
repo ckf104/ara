@@ -6,8 +6,7 @@ filesets:
     rtl:
         file_type: systemVerilogSource
         files:
-            - fpga/src/xcvu9p.svh
-            - fpga/src/xcu280.svh
+            - fpga/src/genesys2.svh
             - hardware/deps/axi/src/axi_pkg.sv
             - hardware/deps/axi/src/axi_intf.sv
             - hardware/deps/axi/include/axi/assign.svh: {is_include_file: true, include_path: hardware/deps/axi/include}
@@ -303,6 +302,13 @@ filesets:
             - hardware/tb/ara_testharness.sv
             - hardware/tb/ara_tb.sv
             - hardware/deps/cva6/tb/common/mock_uart.sv
+    
+    genesys2:
+        files: 
+            - fpga/constraints/ara.xdc: {file_type: xdc}
+            - fpga/constraints/genesys2.xdc: {file_type: xdc}
+            - fpga/src/xilinx_ara_soc.sv: {file_type: systemVerilogSource}
+            - fpga/scripts/genesys2-ip.tcl: {file_type: tclSource}
 
     verilator_tb:
         file_type: systemVerilogSource
@@ -344,6 +350,15 @@ targets:
         tools:
           vivado:
             part: xcu280-fsvh2892-2l-e
+    
+    synth-genesys2:
+        <<: *synth
+        description: Synthesize the design for an FPGA board
+        filesets_append:
+            - genesys2
+        tools:
+          vivado:
+            part: xc7k325tffg900-2 
 
 parameters:
     PRELOAD:

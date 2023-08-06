@@ -15,7 +15,7 @@
 
 module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     // Number of parallel vector lanes.
-    parameter  int           unsigned NrLanes      = 4,
+    parameter  int           unsigned NrLanes      = 2,
     // Support for floating-point data types
     parameter  fpu_support_e          FPUSupport   = FPUSupportHalfSingleDouble,
     // AXI Interface
@@ -32,15 +32,23 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     localparam type                   axi_user_t   = logic [AxiUserWidth-1:0],
     localparam type                   axi_id_t     = logic [AxiIdWidth-1:0]
   ) (
-    input  logic        clk_i,
-    input  logic        rst_ni,
-    output logic [63:0] exit_o,
+    input  logic        sys_clk_n,
+    input  logic        sys_clk_p,
+    input  logic        cpu_resetn,
+    //output logic [63:0] exit_o,
     // Scan chain
     // UART
     input  logic       rx_i,
     output logic       tx_o
     );
-
+  logic clk_i, rst_ni, locked;
+  xlnx_clk_gen wiz (
+    .clk_in1_n(sys_clk_n),
+    .clk_in1_p(sys_clk_p),
+    .clk_out1(clk_i),
+    .locked(locked)
+  );
+  assign rst_ni = locked & cpu_resetn;
 
   /*************
    *  Signals  *
@@ -70,7 +78,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   ) i_ara_soc (
     .clk_i         (clk_i       ),
     .rst_ni        (rst_ni      ),
-    .exit_o        (exit_o      ),
+    .exit_o        (            ),
     .scan_enable_i (1'b0        ),
     .scan_data_i   (1'b0        ),
     .scan_data_o   (/* Unused */),

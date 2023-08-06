@@ -61,9 +61,10 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
   localparam NrAXIMasters = 1; // Actually masters, but slaves on the crossbar
 
   typedef enum int unsigned {
-    L2MEM = 0,
+    ROM   = 0,
     UART  = 1,
-    CTRL  = 2
+    L2MEM = 2,
+    CTRL  = 3
   } axi_slaves_e;
   localparam NrAXISlaves = CTRL + 1;
 
@@ -72,10 +73,13 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
   localparam logic [63:0] DRAMLength = 64'h40000000;
   localparam logic [63:0] UARTLength = 64'h1000;
   localparam logic [63:0] CTRLLength = 64'h1000;
+  localparam logic [63:0] ROMLength  = 64'h10000;
 
   typedef enum logic [63:0] {
+    ROMBase =  64'h0001_0000,
+    UARTBase = 64'h1000_0000,
     DRAMBase = 64'h8000_0000,
-    UARTBase = 64'hC000_0000,
+    //UARTBase = 64'hC000_0000,
     CTRLBase = 64'hD000_0000
   } soc_bus_start_e;
 
@@ -142,6 +146,7 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
 
   axi_pkg::xbar_rule_64_t [NrAXISlaves-1:0] routing_rules;
   assign routing_rules = '{
+    '{idx: ROM, start_addr: ROMBase, end_addr: ROMBase + ROMLength},
     '{idx: CTRL, start_addr: CTRLBase, end_addr: CTRLBase + CTRLLength},
     '{idx: UART, start_addr: UARTBase, end_addr: UARTBase + UARTLength},
     '{idx: L2MEM, start_addr: DRAMBase, end_addr: DRAMBase + DRAMLength}
@@ -252,6 +257,74 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
 
   // One-cycle latency
   `FF(l2_rvalid, l2_req, 1'b0);
+
+  ////////////
+  //  ROM   //
+  ////////////
+
+  logic                          rom_req;
+  logic [AxiAddrWidth-1:0]       rom_addr;
+  logic [AxiNarrowDataWidth-1:0] rom_rdata;
+
+  axi_dw_converter #(
+    .AxiSlvPortDataWidth(AxiWideDataWidth     ),
+    .AxiMstPortDataWidth(AxiNarrowDataWidth   ),
+    .AxiAddrWidth       (AxiAddrWidth         ),
+    .AxiIdWidth         (AxiSocIdWidth        ),
+    .AxiMaxReads        (2                    ),
+    .ar_chan_t          (soc_wide_ar_chan_t   ),
+    .mst_r_chan_t       (soc_narrow_r_chan_t  ),
+    .slv_r_chan_t       (soc_wide_r_chan_t    ),
+    .aw_chan_t          (soc_narrow_aw_chan_t ),
+    .b_chan_t           (soc_wide_b_chan_t    ),
+    .mst_w_chan_t       (soc_narrow_w_chan_t  ),
+    .slv_w_chan_t       (soc_wide_w_chan_t    ),
+    .axi_mst_req_t      (soc_narrow_req_t     ),
+    .axi_mst_resp_t     (soc_narrow_resp_t    ),
+    .axi_slv_req_t      (soc_wide_req_t       ),
+    .axi_slv_resp_t     (soc_wide_resp_t      )
+  ) i_axi_slave_rom_dwc (
+    .clk_i     (clk_i                       ),
+    .rst_ni    (rst_ni                      ),
+    .slv_req_i (periph_wide_axi_req[ROM]   ),
+    .slv_resp_o(periph_wide_axi_resp[ROM]  ),
+    .mst_req_o (periph_narrow_axi_req[ROM] ),
+    .mst_resp_i(periph_narrow_axi_resp[ROM])
+  );
+
+  AXI_BUS #(
+    .AXI_ADDR_WIDTH ( AxiAddrWidth       ),
+    .AXI_DATA_WIDTH ( AxiNarrowDataWidth ),
+    .AXI_ID_WIDTH   ( AxiSocIdWidth         ),
+    .AXI_USER_WIDTH ( AxiUserWidth       )
+  ) mem_bus();
+
+  `AXI_ASSIGN_FROM_REQ(mem_bus, periph_narrow_axi_req[ROM]);
+  `AXI_ASSIGN_TO_RESP(periph_narrow_axi_resp[ROM], mem_bus);
+
+  axi2mem #(
+    .AXI_ID_WIDTH   ( AxiSocIdWidth    ),
+    .AXI_ADDR_WIDTH ( AxiAddrWidth     ),
+    .AXI_DATA_WIDTH ( AxiNarrowDataWidth),
+    .AXI_USER_WIDTH ( AxiUserWidth     )
+  ) i_axi2rom (
+    .clk_i  ( clk                     ),
+    .rst_ni ( rst_ni                  ),
+    .slave  ( mem_bus                 ),
+    .req_o  ( rom_req                 ),
+    .we_o   (                         ),
+    .addr_o ( rom_addr                ),
+    .be_o   (                         ),
+    .data_o (                         ),
+    .data_i ( rom_rdata               )
+  );
+
+  bootrom i_bootrom (
+    .clk_i   ( clk       ),
+    .req_i   ( rom_req   ),
+    .addr_i  ( rom_addr  ),
+    .rdata_o ( rom_rdata )
+); 
 
   ////////////
   //  UART  //
@@ -495,7 +568,7 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
   i_system (
     .clk_i        (clk_i                    ),
     .rst_ni       (rst_ni                   ),
-    .boot_addr_i  (DRAMBase                 ), // start fetching from DRAM
+    .boot_addr_i  (ROMBase                  ), // start fetching from DRAM
     .hart_id_i    (hart_id                  ),
     .scan_enable_i(1'b0                     ),
     .scan_data_i  (1'b0                     ),
