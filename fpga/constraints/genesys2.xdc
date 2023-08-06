@@ -3,3 +3,6 @@ set_property BITSTREAM.CONFIG.SPI_BUSWIDTH 4 [current_design]
 
 set_property -dict { PACKAGE_PIN AD11  IOSTANDARD LVDS } [ get_ports sys_clk_n ]
 set_property -dict { PACKAGE_PIN AD12  IOSTANDARD LVDS } [ get_ports sys_clk_p ]
+
+set_property -dict { PACKAGE_PIN Y23   IOSTANDARD LVCMOS33 } [get_ports tx_o]; #IO_L1P_T0_12 Sch=uart_rx_out
+set_property -dict { PACKAGE_PIN Y20   IOSTANDARD LVCMOS33 } [get_ports rx_i]; #IO_0_12 Sch=uart_tx_in
