@@ -45,6 +45,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   xlnx_clk_gen wiz (
     .clk_in1_n(sys_clk_n),
     .clk_in1_p(sys_clk_p),
+    .resetn(cpu_resetn),
     .clk_out1(clk_i),
     .locked(locked)
   );

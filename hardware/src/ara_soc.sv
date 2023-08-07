@@ -308,7 +308,7 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .AXI_DATA_WIDTH ( AxiNarrowDataWidth),
     .AXI_USER_WIDTH ( AxiUserWidth     )
   ) i_axi2rom (
-    .clk_i  ( clk                     ),
+    .clk_i  ( clk_i                   ),
     .rst_ni ( rst_ni                  ),
     .slave  ( mem_bus                 ),
     .req_o  ( rom_req                 ),
@@ -320,7 +320,7 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
   );
 
   bootrom i_bootrom (
-    .clk_i   ( clk       ),
+    .clk_i   ( clk_i     ),
     .req_i   ( rom_req   ),
     .addr_i  ( rom_addr  ),
     .rdata_o ( rom_rdata )
