@@ -45,7 +45,7 @@ module ara_tb_verilator #(
         $warning("Core Test ", $sformatf("*** FAILED *** (tohost = %0d)", (exit_o >> 1)));
       end else begin
         // Print vector HW runtime
-        $display("[hw-cycles]: %d", int'(dut.runtime_buf_q));
+        $display("[hw-cycles]: %d, NrLanes: %d", int'(dut.runtime_buf_q), NrLanes);
         $info("Core Test ", $sformatf("*** SUCCESS *** (tohost = %0d)", (exit_o >> 1)));
       end
 
