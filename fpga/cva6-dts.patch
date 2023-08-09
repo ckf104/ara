@@ -12,19 +12,10 @@ index 54786ed6..36db9f6a 100644
  LDFLAGS = -nostdlib -nodefaultlibs -nostartfiles
  
 diff --git a/fpga/src/bootrom/ariane.dts b/fpga/src/bootrom/ariane.dts
-index c9e11d58..8efd67f6 100644
+index c9e11d58..6858e4c4 100644
 --- a/fpga/src/bootrom/ariane.dts
 +++ b/fpga/src/bootrom/ariane.dts
-@@ -11,14 +11,14 @@
-   cpus {
-     #address-cells = <1>;
-     #size-cells = <0>;
--    timebase-frequency = <25000000>; // 25 MHz
-+    timebase-frequency = <50000000>; // 50 MHz, specify mtime register increment rate
-     CPU0: cpu@0 {
--      clock-frequency = <50000000>; // 50 MHz
-+      clock-frequency = <100000000>; // 100 MHz
-       device_type = "cpu";
+@@ -18,7 +18,7 @@
        reg = <0>;
        status = "okay";
        compatible = "eth, ariane", "riscv";
@@ -48,7 +39,7 @@ index c9e11d58..8efd67f6 100644
    L26: soc {
      #address-cells = <2>;
      #size-cells = <2>;
-@@ -60,31 +52,18 @@
+@@ -60,13 +52,7 @@
        interrupts-extended = <&CPU0_intc 11 &CPU0_intc 9>;
        reg = <0x0 0xc000000 0x0 0x4000000>;
        riscv,max-priority = <7>;
@@ -63,12 +54,7 @@ index c9e11d58..8efd67f6 100644
      };
      uart@10000000 {
        compatible = "ns16750";
-       reg = <0x0 0x10000000 0x0 0x1000>;
--      clock-frequency = <50000000>;
-+      clock-frequency = <100000000>;
-       current-speed = <115200>;
-       interrupt-parent = <&PLIC0>;
-       interrupts = <1>;
+@@ -78,13 +64,6 @@
        reg-shift = <2>; // regs are spaced on 32 bit boundary
        reg-io-width = <4>; // only 32-bit access are supported
      };
@@ -82,15 +68,6 @@ index c9e11d58..8efd67f6 100644
      xps-spi@20000000 {
        compatible = "xlnx,xps-spi-2.00.b", "xlnx,xps-spi-2.00.a";
        #address-cells = <1>;
-@@ -96,7 +75,7 @@
-       xlnx,fifo-exist = <0x1>;
-       xlnx,num-ss-bits = <0x1>;
-       xlnx,num-transfer-bits = <0x8>;
--      xlnx,sck-ratio = <0x4>;
-+      xlnx,sck-ratio = <0x8>;  // double sck ratio to keep spi clock at 12.5MHz
- 
-       mmc@0 {
-         compatible = "mmc-spi-slot";
 @@ -115,29 +94,5 @@
        //   //interrupt-parent = <&PLIC0>;
        // };
@@ -122,7 +99,7 @@ index c9e11d58..8efd67f6 100644
    };
  };
 diff --git a/fpga/src/bootrom/bootrom.h b/fpga/src/bootrom/bootrom.h
-index bf159d17..b923eb51 100644
+index bf159d17..b7cd33f0 100644
 --- a/fpga/src/bootrom/bootrom.h
 +++ b/fpga/src/bootrom/bootrom.h
 @@ -1,6 +1,6 @@
@@ -231,7 +208,10 @@ index bf159d17..b923eb51 100644
 -    0x6442d03c,
 -    0x64a260e2,
 +    0x80824108,
-+    0x00001517,
+     0x00001517,
+-    0x5e450513,
+-    0xf06f6105,
+-    0x1101e7ff,
 +    0x05131101,
 +    0xec061c45,
 +    0xe426e822,
@@ -254,10 +234,7 @@ index bf159d17..b923eb51 100644
 +    0xec9ff0ef,
 +    0x16600793,
 +    0x5064d03c,
-     0x00001517,
--    0x5e450513,
--    0xf06f6105,
--    0x1101e7ff,
++    0x00001517,
 +    0x17850513,
 +    0xeb5ff0ef,
 +    0x95132481,
@@ -1122,23 +1099,6 @@ index bf159d17..b923eb51 100644
      0x00000000,
      0x00000000,
      0x00000000,
-@@ -838,14 +838,14 @@ uint32_t reset_vec[reset_vec_size] = {
-     0x03000000,
-     0x04000000,
-     0x38000000,
--    0x40787d01,
-+    0x80f0fa02,
-     0x01000000,
-     0x40757063,
-     0x00000030,
-     0x03000000,
-     0x04000000,
-     0x4b000000,
--    0x80f0fa02,
-+    0x00e1f505,
-     0x03000000,
-     0x04000000,
-     0x5b000000,
 @@ -868,11 +868,11 @@ uint32_t reset_vec[reset_vec_size] = {
      0x63736972,
      0x00000076,
@@ -1270,8 +1230,7 @@ index bf159d17..b923eb51 100644
      0x04000000,
 -    0xbb000000,
 -    0x03000000,
-+    0xb5000000,
-     0x02000000,
+-    0x02000000,
 -    0x01000000,
 -    0x75626564,
 -    0x6f632d67,
@@ -1288,7 +1247,8 @@ index bf159d17..b923eb51 100644
 -    0x03000000,
 -    0x08000000,
 -    0xfd000000,
--    0x02000000,
++    0xb5000000,
+     0x02000000,
 -    0xffff0000,
 -    0x03000000,
 -    0x10000000,
@@ -1305,12 +1265,8 @@ index bf159d17..b923eb51 100644
      0x02000000,
      0x01000000,
      0x74726175,
-@@ -1127,65 +1057,29 @@ uint32_t reset_vec[reset_vec_size] = {
-     0x03000000,
-     0x04000000,
-     0x4b000000,
--    0x80f0fa02,
-+    0x00e1f505,
+@@ -1130,62 +1060,26 @@ uint32_t reset_vec[reset_vec_size] = {
+     0x80f0fa02,
      0x03000000,
      0x04000000,
 -    0x39010000,
@@ -1393,7 +1349,7 @@ index bf159d17..b923eb51 100644
      0x02000000,
      0x02000000,
      0x03000000,
-@@ -1230,25 +1124,25 @@ uint32_t reset_vec[reset_vec_size] = {
+@@ -1230,24 +1124,24 @@ uint32_t reset_vec[reset_vec_size] = {
      0x00100000,
      0x03000000,
      0x08000000,
@@ -1419,12 +1375,10 @@ index bf159d17..b923eb51 100644
      0x03000000,
      0x04000000,
 -    0xbe010000,
--    0x04000000,
 +    0x85010000,
-+    0x08000000,
+     0x04000000,
      0x01000000,
      0x40636d6d,
-     0x00000030,
 @@ -1265,134 +1159,17 @@ uint32_t reset_vec[reset_vec_size] = {
      0x00000000,
      0x03000000,
@@ -1770,7 +1724,7 @@ index bf159d17..b923eb51 100644
      0x6f57206f,
      0x21646c72,
 diff --git a/fpga/src/bootrom/bootrom.sv b/fpga/src/bootrom/bootrom.sv
-index 251310ac..67930033 100644
+index 251310ac..a6ae831b 100644
 --- a/fpga/src/bootrom/bootrom.sv
 +++ b/fpga/src/bootrom/bootrom.sv
 @@ -20,7 +20,7 @@ module bootrom (
@@ -2010,7 +1964,7 @@ index 251310ac..67930033 100644
          64'h03000000_00000030,
          64'h40636d6d_01000000,
 -        64'h04000000_be010000,
-+        64'h08000000_85010000,
++        64'h04000000_85010000,
          64'h04000000_03000000,
 -        64'h08000000_a7010000,
 +        64'h08000000_6e010000,
@@ -2038,7 +1992,7 @@ index 251310ac..67930033 100644
          64'h03000000_00000000,
          64'h0f000000_04000000,
          64'h03000000_01000000,
-@@ -316,35 +223,17 @@ module bootrom (
+@@ -316,34 +223,16 @@ module bootrom (
          64'h00000000_30303030,
          64'h30303032_40697073,
          64'h2d737078_01000000,
@@ -2075,12 +2029,10 @@ index 251310ac..67930033 100644
 +        64'h0e010000_04000000,
          64'h03000000_00c20100,
 -        64'h39010000_04000000,
--        64'h03000000_80f0fa02,
 +        64'h00010000_04000000,
-+        64'h03000000_00e1f505,
+         64'h03000000_80f0fa02,
          64'h4b000000_04000000,
          64'h03000000_00100000,
-         64'h00000000_00000010,
 @@ -355,93 +244,60 @@ module bootrom (
          64'h03000000_00000030,
          64'h30303030_30303140,
@@ -2246,20 +2198,6 @@ index 251310ac..67930033 100644
          64'h00000076_63736972,
          64'h00656e61_69726120,
          64'h2c687465_1b000000,
-@@ -485,11 +339,11 @@ module bootrom (
-         64'h67000000_04000000,
-         64'h03000000_00757063,
-         64'h5b000000_04000000,
--        64'h03000000_80f0fa02,
-+        64'h03000000_00e1f505,
-         64'h4b000000_04000000,
-         64'h03000000_00000030,
-         64'h40757063_01000000,
--        64'h40787d01_38000000,
-+        64'h80f0fa02_38000000,
-         64'h04000000_03000000,
-         64'h00000000_0f000000,
-         64'h04000000_03000000,
 @@ -518,11 +372,11 @@ module bootrom (
          64'h00000000_01000000,
          64'h00000000_00000000,

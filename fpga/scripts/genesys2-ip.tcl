@@ -5,12 +5,13 @@ set FPGA_DIR [get_property DIRECTORY [current_project]]/../../../fpga
 create_ip -name clk_wiz -vendor xilinx.com -library ip -version 6.0 -module_name xlnx_clk_gen
 set_property -dict [list \
   CONFIG.CLKIN1_JITTER_PS {50.0} \
-  CONFIG.CLKOUT1_JITTER {112.316} \
+  CONFIG.CLKOUT1_JITTER {129.198} \
   CONFIG.CLKOUT1_PHASE_ERROR {89.971} \
-  CONFIG.Component_Name {xlnx_clk_gen} \
+  CONFIG.CLKOUT1_REQUESTED_OUT_FREQ {50.000} \
   CONFIG.MMCM_CLKFBOUT_MULT_F {5.000} \
   CONFIG.MMCM_CLKIN1_PERIOD {5.000} \
   CONFIG.MMCM_CLKIN2_PERIOD {10.0} \
+  CONFIG.MMCM_CLKOUT0_DIVIDE_F {20.000} \
   CONFIG.PRIM_IN_FREQ {200.000} \
   CONFIG.PRIM_SOURCE {Global_buffer} \
   CONFIG.RESET_PORT {resetn} \
@@ -39,7 +40,7 @@ set_property -dict [list \
 create_ip -name axi_quad_spi -vendor xilinx.com -library ip -version 3.2 -module_name xlnx_axi_quad_spi
 set_property -dict [list \
   CONFIG.C_FIFO_DEPTH {256} \
-  CONFIG.C_SCK_RATIO {8} \
+  CONFIG.C_SCK_RATIO {4} \
   CONFIG.C_S_AXI4_ID_WIDTH {0} \
   CONFIG.C_TYPE_OF_AXI4_INTERFACE {1} \
   CONFIG.C_USE_STARTUP {0} \

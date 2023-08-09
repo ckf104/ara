@@ -75,7 +75,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   logic ddr3_sync_rst, rst_ni, rst_i;
   xlnx_clk_gen wiz (
     // Clock out ports
-    .clk_out1(clk_i),     // output clk_i 100MHz
+    .clk_out1(clk_i),     // output clk_i 50MHz
     // Status and control signals
     .resetn(cpu_resetn), // input resetn
     .locked(locked),       // output locked
@@ -692,7 +692,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
       .m_axi_rvalid   ( s_axi_spi_rvalid   ),
       .m_axi_rready   ( s_axi_spi_rready   )
   );
-  // Currently we use system clk with 100MHz frequency, and set sck frequency ratio to 8:1,
+  // Currently we use system clk with 100MHz frequency, and set sck frequency ratio to 4:1,
   // Which means frequency of spi sck signal is 12.5Mhz. Each time we change system clk frequency
   // by reconfiguring clock wizard ip, please change sck ratio config of axi-quad-spi ip accordingly. 
   xlnx_axi_quad_spi i_xlnx_axi_quad_spi (
