@@ -1,0 +1,1 @@
+write_mem_info ara_soc.mmi

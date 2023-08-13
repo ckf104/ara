@@ -1,3 +1,4 @@
+set FPGA_DIR [get_property DIRECTORY [current_project]]/../../../fpga
 create_ip -name clk_wiz -vendor xilinx.com -library ip -version 6.0 -module_name xlnx_clk_gen
 set_property -dict [list \
   CONFIG.CLKIN1_JITTER_PS {50.0} \
@@ -14,3 +15,4 @@ set_property -dict [list \
   CONFIG.RESET_PORT {resetn} \
   CONFIG.RESET_TYPE {ACTIVE_LOW} \
 ] [get_ips xlnx_clk_gen]
+set_property STEPS.WRITE_BITSTREAM.TCL.POST $FPGA_DIR/scripts/write-mem.tcl [get_runs impl_1]
