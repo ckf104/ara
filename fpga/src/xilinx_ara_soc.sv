@@ -65,7 +65,13 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     output logic        spi_mosi    ,
     input  logic        spi_miso    ,
     output logic        spi_ss      ,
-    output logic        spi_clk_o   
+    output logic        spi_clk_o   ,
+    // jtag
+    input  logic        trst_n      ,
+    input  logic        tck         ,
+    input  logic        tms         ,
+    input  logic        tdi         ,
+    output wire         tdo         
     );
   /****************************
    *  CLK and RST Generation  *
@@ -109,6 +115,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   logic        uart_pslverr;
 
   /* Memory Map */
+  localparam logic[63:0] DebugLength    = 64'h1000;
   localparam logic[63:0] ROMLength      = 64'h10000;
   localparam logic[63:0] CLINTLength    = 64'hC0000;
   localparam logic[63:0] PLICLength     = 64'h3FF_FFFF;
@@ -118,17 +125,19 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   localparam logic[63:0] DRAMLength     = 64'h40000000; // 1GByte of DDR (split between two chips on Genesys2)
 
   typedef enum int unsigned {
-    ROM = 0,
-    CLINT  = 1,
-    PLIC  = 2,
-    UART = 3,    // INT0
-    SPI = 4,     // INT1
-    DRAM = 5 
+    Debug = 0,
+    ROM = 1,
+    CLINT  = 2,
+    PLIC  = 3,
+    UART = 4,    // INT0
+    SPI = 5,     // INT1
+    DRAM = 6 
   } axi_slaves_e;
-  localparam NrAXIMasters = 1; // Actually masters, but slaves on the crossbar
+  localparam NrAXIMasters = 2; // Actually masters, but slaves on the crossbar
   localparam NrAXISlaves = DRAM + 1;
 
   typedef enum logic [63:0] {
+    DebugBase    = 64'h0000_0000,
     ROMBase      = 64'h0001_0000,
     CLINTBase    = 64'h0200_0000,
     PLICBase     = 64'h0C00_0000,
@@ -158,6 +167,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   // AXI Typedefs
   // Here I swap the axi id width of system bus and soc bus. Previous settings is wrong, I think.
   `AXI_TYPEDEF_ALL(system, axi_addr_t, axi_soc_id_t, axi_data_t, axi_strb_t, axi_user_t)
+  `AXI_TYPEDEF_ALL(system_narrow, axi_addr_t, axi_soc_id_t, axi_narrow_data_t, axi_narrow_strb_t, axi_user_t)
   `AXI_TYPEDEF_ALL(ara_axi, axi_addr_t, axi_core_id_t, axi_data_t, axi_strb_t, axi_user_t)
   `AXI_TYPEDEF_ALL(ariane_axi, axi_addr_t, axi_core_id_t, axi_narrow_data_t, axi_narrow_strb_t,
     axi_user_t)
@@ -167,8 +177,8 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   `AXI_LITE_TYPEDEF_ALL(soc_narrow_lite, axi_addr_t, axi_narrow_data_t, axi_narrow_strb_t)
 
   // Ara system interface
-  system_req_t  system_axi_req;
-  system_resp_t system_axi_resp;
+  system_req_t [NrAXIMasters-1:0] system_axi_req;
+  system_resp_t[NrAXIMasters-1:0] system_axi_resp;
 
   // Ariane config, TODO
   localparam ariane_pkg::ariane_cfg_t ArianeAraConfig = '{
@@ -176,13 +186,13 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     BTBEntries           : 32,
     BHTEntries           : 128,
     // idempotent region
-    NrNonIdempotentRules : 2,
-    NonIdempotentAddrBase: {64'b0, 64'b0},
-    NonIdempotentLength  : {64'b0, 64'b0},
-    NrExecuteRegionRules : 2,
+    NrNonIdempotentRules : 1,
+    NonIdempotentAddrBase: {64'b0},
+    NonIdempotentLength  : {DRAMBase},
+    NrExecuteRegionRules : 3,
     //                      DRAM,       Boot ROM,   Debug Module
-    ExecuteRegionAddrBase: {DRAMBase, ROMBase},
-    ExecuteRegionLength  : {DRAMLength, ROMLength},
+    ExecuteRegionAddrBase: {DRAMBase, ROMBase, DebugBase},
+    ExecuteRegionLength  : {DRAMLength, ROMLength, DebugLength},
     // cached region
     NrCachedRegionRules  : 1,
     CachedRegionAddrBase : {DRAMBase},
@@ -231,7 +241,17 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   logic [1:0] ariane_irq;
   logic       ariane_ipi;
   logic       ariane_timer_irq;
-  logic       ariane_debug_req = '0;
+  logic       ariane_debug_req;
+
+  /* RISCV Debug */
+  logic          debug_req_valid;
+  logic          debug_req_ready;
+  dm::dmi_req_t  debug_req;
+  logic          debug_resp_valid;
+  logic          debug_resp_ready;
+  dm::dmi_resp_t debug_resp;
+
+  logic dmactive;
 
   /* PLIC */
   // PLIC use 32bits data and addr
@@ -350,12 +370,202 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .scan_enable_i     (1'b0               ),
     .scan_data_i       (1'b0               ),
     .scan_data_o       (/* Unconnected */  ),
-    .axi_req_o         (system_axi_req     ),
-    .axi_resp_i        (system_axi_resp    ),
+    .axi_req_o         (system_axi_req[0]  ),
+    .axi_resp_i        (system_axi_resp[0] ),
     .ariane_irq_i      (ariane_irq         ),
     .ariane_ipi_i      (ariane_ipi         ),
     .ariane_time_irq_i (ariane_timer_irq   ),
     .ariane_debug_req_i(ariane_debug_req   )
+  );
+
+  //////////////////////
+  //  RISCV Debugger  //
+  //////////////////////
+
+  dmi_jtag i_dmi_jtag (
+    .clk_i                ( clk_i                ),
+    .rst_ni               ( rst_ni               ),
+    .dmi_rst_no           (                      ), // keep open
+    .testmode_i           ( test_en              ),
+    .dmi_req_valid_o      ( debug_req_valid      ),
+    .dmi_req_ready_i      ( debug_req_ready      ),
+    .dmi_req_o            ( debug_req            ),
+    .dmi_resp_valid_i     ( debug_resp_valid     ),
+    .dmi_resp_ready_o     ( debug_resp_ready     ),
+    .dmi_resp_i           ( debug_resp           ),
+    .tck_i                ( tck    ),
+    .tms_i                ( tms    ),
+    .trst_ni              ( trst_n ),
+    .td_i                 ( tdi    ),
+    .td_o                 ( tdo    ),
+    .tdo_oe_o             (        )
+  );
+
+  ariane_axi::req_t    dm_axi_m_req;
+  ariane_axi::resp_t   dm_axi_m_resp;
+
+  logic                dm_slave_req;
+  logic                dm_slave_we;
+  logic [64-1:0]       dm_slave_addr;
+  logic [64/8-1:0]     dm_slave_be;
+  logic [64-1:0]       dm_slave_wdata;
+  logic [64-1:0]       dm_slave_rdata;
+
+  logic                dm_master_req;
+  logic [64-1:0]       dm_master_add;
+  logic                dm_master_we;
+  logic [64-1:0]       dm_master_wdata;
+  logic [64/8-1:0]     dm_master_be;
+  logic                dm_master_gnt;
+  logic                dm_master_r_valid;
+  logic [64-1:0]       dm_master_r_rdata;
+
+  system_narrow_req_t   dm_narrow_req;
+  system_narrow_resp_t  dm_narrow_resp;
+
+// debug module
+  dm_top #(
+    .NrHarts          ( 1                 ),
+    .BusWidth         ( AxiNarrowDataWidth),
+    .SelectableHarts  ( 1'b1              )
+  ) i_dm_top (
+    .clk_i            ( clk_i             ),
+    .rst_ni           ( rst_ni            ), // PoR
+    .testmode_i       ( test_en           ),
+    .ndmreset_o       (                   ),
+    .dmactive_o       ( dmactive          ), // active debug session
+    .debug_req_o      ( ariane_debug_req  ),
+    .unavailable_i    ( '0                ),
+    .hartinfo_i       ( {ariane_pkg::DebugHartInfo} ),
+    .slave_req_i      ( dm_slave_req      ),
+    .slave_we_i       ( dm_slave_we       ),
+    .slave_addr_i     ( dm_slave_addr     ),
+    .slave_be_i       ( dm_slave_be       ),
+    .slave_wdata_i    ( dm_slave_wdata    ),
+    .slave_rdata_o    ( dm_slave_rdata    ),
+    .master_req_o     ( dm_master_req     ),
+    .master_add_o     ( dm_master_add     ),
+    .master_we_o      ( dm_master_we      ),
+    .master_wdata_o   ( dm_master_wdata   ),
+    .master_be_o      ( dm_master_be      ),
+    .master_gnt_i     ( dm_master_gnt     ),
+    .master_r_valid_i ( dm_master_r_valid ),
+    .master_r_rdata_i ( dm_master_r_rdata ),
+    .dmi_rst_ni       ( rst_ni            ),
+    .dmi_req_valid_i  ( debug_req_valid   ),
+    .dmi_req_ready_o  ( debug_req_ready   ),
+    .dmi_req_i        ( debug_req         ),
+    .dmi_resp_valid_o ( debug_resp_valid  ),
+    .dmi_resp_ready_i ( debug_resp_ready  ),
+    .dmi_resp_o       ( debug_resp        )
+  );
+
+  axi_dw_converter #(
+    .AxiSlvPortDataWidth(AxiWideDataWidth     ),
+    .AxiMstPortDataWidth(AxiNarrowDataWidth   ),
+    .AxiAddrWidth       (AxiAddrWidth         ),
+    .AxiIdWidth         (AxiIdWidth           ),
+    .AxiMaxReads        (2                    ),
+    .ar_chan_t          (soc_wide_ar_chan_t   ),
+    .mst_r_chan_t       (soc_narrow_r_chan_t  ),
+    .slv_r_chan_t       (soc_wide_r_chan_t    ),
+    .aw_chan_t          (soc_narrow_aw_chan_t ),
+    .b_chan_t           (soc_wide_b_chan_t    ),
+    .mst_w_chan_t       (soc_narrow_w_chan_t  ),
+    .slv_w_chan_t       (soc_wide_w_chan_t    ),
+    .axi_mst_req_t      (soc_narrow_req_t     ),
+    .axi_mst_resp_t     (soc_narrow_resp_t    ),
+    .axi_slv_req_t      (soc_wide_req_t       ),
+    .axi_slv_resp_t     (soc_wide_resp_t      )
+  ) i_axi_slave_debugger_dwc (
+    .clk_i     (clk_i                        ),
+    .rst_ni    (rst_ni                       ),
+    .slv_req_i (periph_wide_axi_req[Debug]   ),
+    .slv_resp_o(periph_wide_axi_resp[Debug]  ),
+    .mst_req_o (periph_narrow_axi_req[Debug] ),
+    .mst_resp_i(periph_narrow_axi_resp[Debug])
+  );
+  
+  AXI_BUS #(
+    .AXI_ADDR_WIDTH ( AxiAddrWidth       ),
+    .AXI_DATA_WIDTH ( AxiNarrowDataWidth ),
+    .AXI_ID_WIDTH   ( AxiIdWidth         ),
+    .AXI_USER_WIDTH ( AxiUserWidth       )
+  ) debugger_bus();
+
+  `AXI_ASSIGN_FROM_REQ(debugger_bus, periph_narrow_axi_req[Debug]);
+  `AXI_ASSIGN_TO_RESP(periph_narrow_axi_resp[Debug], debugger_bus);
+
+  axi2mem #(
+    .AXI_ID_WIDTH   ( AxiIdWidth          ),
+    .AXI_ADDR_WIDTH ( AxiAddrWidth        ),
+    .AXI_DATA_WIDTH ( AxiNarrowDataWidth  ),
+    .AXI_USER_WIDTH ( AxiUserWidth        )
+  ) i_dm_axi2mem (
+    .clk_i      ( clk_i                     ),
+    .rst_ni     ( rst_ni                    ),
+    .slave      ( debugger_bus              ),
+    .req_o      ( dm_slave_req              ),
+    .we_o       ( dm_slave_we               ),
+    .addr_o     ( dm_slave_addr             ),
+    .be_o       ( dm_slave_be               ),
+    .data_o     ( dm_slave_wdata            ),
+    .data_i     ( dm_slave_rdata            )
+  );
+
+  // TODO: id width adapter's axi interface is the same as
+  // ariane. But after adding ara accelerator, slave side of
+  // crossbar(and the adapter) should have one bit more id width 
+  // than ariane. Currently id width mismatch error is ignored.
+  axi_adapter #(
+    .DATA_WIDTH          ( AxiNarrowDataWidth        )
+  ) i_dm_axi_master (
+  .clk_i                 ( clk_i                     ),
+  .rst_ni                ( rst_ni                    ),
+  .req_i                 ( dm_master_req             ),
+  .type_i                ( ariane_axi::SINGLE_REQ    ),
+  .gnt_o                 ( dm_master_gnt             ),
+  .gnt_id_o              (                           ),
+  .addr_i                ( dm_master_add             ),
+  .we_i                  ( dm_master_we              ),
+  .wdata_i               ( dm_master_wdata           ),
+  .be_i                  ( dm_master_be              ),
+  .size_i                ( 2'b11                     ), // always do 64bit here and use byte enables to gate
+  .id_i                  ( '0                        ),
+  .valid_o               ( dm_master_r_valid         ),
+  .rdata_o               ( dm_master_r_rdata         ),
+  .id_o                  (                           ),
+  .critical_word_o       (                           ),
+  .critical_word_valid_o (                           ),
+  .axi_req_o             ( dm_narrow_req             ),
+  .axi_resp_i            ( dm_narrow_resp            )
+  );
+
+  // system_narrow --> system
+  axi_dw_converter #(
+    .AxiSlvPortDataWidth(AxiNarrowDataWidth  ),
+    .AxiMstPortDataWidth(AxiWideDataWidth    ),
+    .AxiAddrWidth       (AxiAddrWidth        ),
+    .AxiIdWidth         (AxiSocIdWidth       ),
+    .AxiMaxReads        (2                   ),
+    .ar_chan_t          (system_narrow_ar_t  ),
+    .mst_r_chan_t       (system_r_t          ),
+    .slv_r_chan_t       (system_narrow_r_t   ),
+    .aw_chan_t          (system_narrow_aw_t  ),
+    .b_chan_t           (system_narrow_b_t   ),
+    .mst_w_chan_t       (system_w_t          ),
+    .slv_w_chan_t       (system_narrow_w_t   ),
+    .axi_mst_req_t      (system_req_t        ),
+    .axi_mst_resp_t     (system_resp_t       ),
+    .axi_slv_req_t      (system_narrow_req_t ),
+    .axi_slv_resp_t     (system_narrow_resp_t)
+  ) i_debugger_axi_dwc (
+    .clk_i     (clk_i                 ),
+    .rst_ni    (rst_ni                ),
+    .slv_req_i (dm_narrow_req         ),
+    .slv_resp_o(dm_narrow_resp        ),
+    .mst_req_o (system_axi_req[1]     ),
+    .mst_resp_i(system_axi_resp[1]    )
   );
 
   ////////////////
