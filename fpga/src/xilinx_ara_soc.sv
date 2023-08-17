@@ -208,6 +208,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   /* AXI Crossbar */
   axi_pkg::xbar_rule_64_t [NrAXISlaves-1:0] routing_rules;
   assign routing_rules = '{
+    '{idx: Debug, start_addr: DebugBase, end_addr: DebugBase + DebugLength},
     '{idx: ROM, start_addr: ROMBase, end_addr: ROMBase + ROMLength},
     '{idx: CLINT, start_addr: CLINTBase, end_addr: CLINTBase + CLINTLength},
     '{idx: PLIC, start_addr: PLICBase, end_addr: PLICBase + PLICLength},
