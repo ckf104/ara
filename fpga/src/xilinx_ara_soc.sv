@@ -78,7 +78,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
    ****************************/
   logic test_en = 1'b0;
   logic ddr3_clock_out, clk_i, locked;
-  logic ddr3_sync_rst, rst_ni, rst_i;
+  logic ddr3_sync_rst, rst_ni, rst_i, ndmreset, ndmreset_n;
   xlnx_clk_gen wiz (
     // Clock out ports
     .clk_out1(clk_i),     // output clk_i 50MHz
@@ -90,12 +90,12 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   );
   rstgen i_rstgen_main (
     .clk_i        ( clk_i                     ),
-    .rst_ni       ( locked & (~ddr3_sync_rst) ),
+    .rst_ni       ( locked & (~ndmreset)      ),
     .test_mode_i  ( test_en                   ),
-    .rst_no       ( rst_ni                    ),
+    .rst_no       ( ndmreset_n                ),
     .init_no      (                           ) // keep open
   );
-  assign rst_i = ~rst_ni;
+  assign rst_ni = ~ddr3_sync_rst;
 
   /*************
    *  Signals  *
@@ -365,7 +365,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .system_axi_resp_t (system_resp_t        ))
   i_system (
     .clk_i             (clk_i              ),
-    .rst_ni            (rst_ni             ),
+    .rst_ni            (ndmreset_n         ),
     .boot_addr_i       (ROMBase            ), // start fetching from ROM
     .hart_id_i         (hart_id            ),
     .scan_enable_i     (1'b0               ),
@@ -433,7 +433,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .clk_i            ( clk_i             ),
     .rst_ni           ( rst_ni            ), // PoR
     .testmode_i       ( test_en           ),
-    .ndmreset_o       (                   ),
+    .ndmreset_o       ( ndmreset          ),
     .dmactive_o       ( dmactive          ), // active debug session
     .debug_req_o      ( ariane_debug_req  ),
     .unavailable_i    ( '0                ),
@@ -591,7 +591,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .rule_t       (axi_pkg::xbar_rule_64_t)
   ) i_soc_xbar (
     .clk_i                (clk_i               ),
-    .rst_ni               (rst_ni              ),
+    .rst_ni               (ndmreset_n          ),
     .test_i               (1'b0                ),
     .slv_ports_req_i      (system_axi_req      ),
     .slv_ports_resp_o     (system_axi_resp     ),
@@ -620,7 +620,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .APB_ADDR_WIDTH    (32                )
   ) i_axi2apb_64_32_uart (
     .ACLK      (clk_i                                ),
-    .ARESETn   (rst_ni                               ),
+    .ARESETn   (ndmreset_n                           ),
     .test_en_i (test_en                              ),
     .AWID_i    (periph_narrow_axi_req[UART].aw.id    ),
     .AWADDR_i  (periph_narrow_axi_req[UART].aw.addr  ),
@@ -695,7 +695,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .axi_slv_resp_t     (soc_wide_resp_t      )
   ) i_axi_slave_uart_dwc (
     .clk_i     (clk_i                       ),
-    .rst_ni    (rst_ni                      ),
+    .rst_ni    (ndmreset_n                  ),
     .slv_req_i (periph_wide_axi_req[UART]   ),
     .slv_resp_o(periph_wide_axi_resp[UART]  ),
     .mst_req_o (periph_narrow_axi_req[UART] ),
@@ -704,7 +704,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
 
   apb_uart i_apb_uart (
     .CLK     ( clk_i           ),
-    .RSTN    ( rst_ni          ),
+    .RSTN    ( ndmreset_n      ),
     .PSEL    ( uart_psel       ),
     .PENABLE ( uart_penable    ),
     .PWRITE  ( uart_pwrite     ),
@@ -731,8 +731,8 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   //////////////////////
 
   // divide clock by two
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (~rst_ni) begin
+  always_ff @(posedge clk_i or negedge ndmreset_n) begin
+    if (~ndmreset_n) begin
       rtc <= 0;
     end else begin
       rtc <= rtc ^ 1'b1;
@@ -748,7 +748,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .axi_resp_t     ( soc_narrow_resp_t )
   ) i_clint (
     .clk_i       ( clk_i                        ),
-    .rst_ni      ( rst_ni                       ),
+    .rst_ni      ( ndmreset_n                   ),
     .testmode_i  ( test_en                      ),
     .axi_req_i   ( periph_narrow_axi_req[CLINT] ),
     .axi_resp_o  ( periph_narrow_axi_resp[CLINT]),
@@ -775,8 +775,8 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .axi_slv_req_t      (soc_wide_req_t       ),
     .axi_slv_resp_t     (soc_wide_resp_t      )
   ) i_axi_slave_clint_dwc (
-    .clk_i     (clk_i                       ),
-    .rst_ni    (rst_ni                      ),
+    .clk_i     (clk_i                        ),
+    .rst_ni    (ndmreset_n                   ),
     .slv_req_i (periph_wide_axi_req[CLINT]   ),
     .slv_resp_o(periph_wide_axi_resp[CLINT]  ),
     .mst_req_o (periph_narrow_axi_req[CLINT] ),
@@ -827,7 +827,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   // each time we change NrLane, IP config need to be changed accordingly? TODO
   xlnx_axi_dwidth_converter i_xlnx_axi_dwidth_converter_spi (
       .s_axi_aclk     ( clk_i              ),
-      .s_axi_aresetn  ( rst_ni             ),
+      .s_axi_aresetn  ( ndmreset_n         ),
       .s_axi_awid     ( periph_wide_axi_req[SPI].aw.id        ),
       .s_axi_awaddr   ( periph_wide_axi_req[SPI].aw.addr[31:0]  ),
       .s_axi_awlen    ( periph_wide_axi_req[SPI].aw.len         ),
@@ -909,7 +909,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   xlnx_axi_quad_spi i_xlnx_axi_quad_spi (
       .ext_spi_clk    ( clk_i                  ),   // sck freq = ext_spi_clk / sck_ratio
       .s_axi4_aclk    ( clk_i                  ),
-      .s_axi4_aresetn ( rst_ni                 ),
+      .s_axi4_aresetn ( ndmreset_n             ),
       .s_axi4_awaddr  ( s_axi_spi_awaddr[23:0] ),
       .s_axi4_awlen   ( s_axi_spi_awlen        ),
       .s_axi4_awsize  ( s_axi_spi_awsize       ),
@@ -970,7 +970,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
       .APB_ADDR_WIDTH     ( 32            )
   ) i_axi2apb_64_32_plic (
     .ACLK      ( clk_i          ),
-    .ARESETn   ( rst_ni         ),
+    .ARESETn   ( ndmreset_n     ),
     .test_en_i ( test_en        ),
     .AWID_i    ( periph_narrow_axi_req[PLIC].aw.id     ),
     .AWADDR_i  ( periph_narrow_axi_req[PLIC].aw.addr   ),
@@ -1045,7 +1045,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .axi_slv_resp_t     (soc_wide_resp_t      )
   ) i_axi_slave_plic_dwc (
     .clk_i     (clk_i                       ),
-    .rst_ni    (rst_ni                      ),
+    .rst_ni    (ndmreset_n                  ),
     .slv_req_i (periph_wide_axi_req[PLIC]   ),
     .slv_resp_o(periph_wide_axi_resp[PLIC]  ),
     .mst_req_o (periph_narrow_axi_req[PLIC] ),
@@ -1054,7 +1054,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
 
   apb_to_reg i_apb_to_reg (
       .clk_i     ( clk_i        ),
-      .rst_ni    ( rst_ni       ),
+      .rst_ni    ( ndmreset_n   ),
       .penable_i ( plic_penable ),
       .pwrite_i  ( plic_pwrite  ),
       .paddr_i   ( plic_paddr   ),
@@ -1084,7 +1084,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .MAX_PRIO    ( MaxPriority )
   ) i_plic (
     .clk_i,
-    .rst_ni,
+    .rst_ni        (ndmreset_n   ),
     .req_i         ( plic_req    ),
     .resp_o        ( plic_resp   ),
     .le_i          ( '0          ), // 0:level 1:edge
@@ -1115,7 +1115,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .axi_slv_resp_t     (soc_wide_resp_t      )
   ) i_axi_slave_rom_dwc (
     .clk_i     (clk_i                       ),
-    .rst_ni    (rst_ni                      ),
+    .rst_ni    (ndmreset_n                 ),
     .slv_req_i (periph_wide_axi_req[ROM]   ),
     .slv_resp_o(periph_wide_axi_resp[ROM]  ),
     .mst_req_o (periph_narrow_axi_req[ROM] ),
@@ -1139,7 +1139,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .AXI_USER_WIDTH ( AxiUserWidth       )
   ) i_axi2rom (
     .clk_i  ( clk_i       ),
-    .rst_ni ( rst_ni      ),
+    .rst_ni ( ndmreset_n  ),
     .slave  ( mem_bus     ),
     .req_o  ( rom_req     ),
     .we_o   (             ),
@@ -1190,7 +1190,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .axi_slv_resp_t     (soc_wide_resp_t      )
   ) i_axi_slave_dram_dwc (
     .clk_i     (clk_i                       ),
-    .rst_ni    (rst_ni                      ),
+    .rst_ni    (ndmreset_n                  ),
     .slv_req_i (periph_wide_axi_req[DRAM]   ),
     .slv_resp_o(periph_wide_axi_resp[DRAM]  ),
     .mst_req_o (periph_narrow_axi_req[DRAM] ),
@@ -1223,14 +1223,14 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .RISCV_WORD_WIDTH   ( 64                 )
   ) i_axi_riscv_atomics (
     .clk_i  ( clk_i                    ),
-    .rst_ni ( rst_ni                   ),
+    .rst_ni ( ndmreset_n               ),
     .slv    ( riscv_atop               ),
     .mst    ( ddr3                     )
   );
 
   xlnx_axi_clock_converter i_xlnx_axi_clock_converter_ddr (
     .s_axi_aclk     ( clk_i            ),
-    .s_axi_aresetn  ( rst_ni           ),
+    .s_axi_aresetn  ( ndmreset_n       ),
     .s_axi_awid     ( ddr3.aw_id       ),
     .s_axi_awaddr   ( ddr3.aw_addr     ),
     .s_axi_awlen    ( ddr3.aw_len      ),
@@ -1272,7 +1272,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .s_axi_rready   ( ddr3.r_ready     ),
     // to size converter
     .m_axi_aclk     ( ddr3_clock_out   ),
-    .m_axi_aresetn  ( rst_ni           ),
+    .m_axi_aresetn  ( ndmreset_n       ),
     .m_axi_awid     ( ddr3_axi_awid    ),
     .m_axi_awaddr   ( ddr3_axi_awaddr  ),
     .m_axi_awlen    ( ddr3_axi_awlen   ),
@@ -1347,7 +1347,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .app_zq_ack      (                ), // keep open
     .ui_clk          ( ddr3_clock_out ),
     .ui_clk_sync_rst ( ddr3_sync_rst  ),
-    .aresetn         ( '1             ), // or set cpu_resetn?
+    .aresetn         ( ndmreset_n     ), // or set cpu_resetn?
     .s_axi_awid      ( ddr3_axi_awid  ),
     .s_axi_awaddr    ( ddr3_axi_awaddr[29:0] ),
     .s_axi_awlen    ( ddr3_axi_awlen ),
