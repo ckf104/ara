@@ -120,7 +120,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   localparam logic[63:0] CLINTLength    = 64'hC0000;
   localparam logic[63:0] PLICLength     = 64'h3FF_FFFF;
   localparam logic[63:0] UARTLength     = 64'h1000;
-  // localparam logic[63:0] TimerLength    = 64'h1000;
+  localparam logic[63:0] TimerLength    = 64'h1000;
   localparam logic[63:0] SPILength      = 64'h800000;
   localparam logic[63:0] DRAMLength     = 64'h40000000; // 1GByte of DDR (split between two chips on Genesys2)
 
@@ -130,8 +130,9 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     CLINT  = 2,
     PLIC  = 3,
     UART = 4,    // INT0
-    SPI = 5,     // INT1
-    DRAM = 6 
+    Timer = 5,
+    SPI = 6,     // INT1
+    DRAM = 7 
   } axi_slaves_e;
   localparam NrAXIMasters = 2; // Actually masters, but slaves on the crossbar
   localparam NrAXISlaves = DRAM + 1;
@@ -142,7 +143,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     CLINTBase    = 64'h0200_0000,
     PLICBase     = 64'h0C00_0000,
     UARTBase     = 64'h1000_0000,
-    //TimerBase    = 64'h1800_0000,
+    TimerBase    = 64'h1800_0000,
     SPIBase      = 64'h2000_0000,
     DRAMBase     = 64'h8000_0000
   } soc_bus_start_e;
@@ -261,7 +262,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   // M-Mode Hart, S-Mode Hart
   localparam int unsigned NumTargets = 2;
   // Uart, SPI, reserved
-  localparam int unsigned NumSources = 4;
+  localparam int unsigned NumSources = 30;
   localparam int unsigned MaxPriority = 7;
 
   REG_BUS #(
@@ -782,6 +783,136 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     .mst_req_o (periph_narrow_axi_req[CLINT] ),
     .mst_resp_i(periph_narrow_axi_resp[CLINT])
   );
+  //////////////////////
+  //       Timer      //
+  //////////////////////
+
+  logic         timer_penable;
+  logic         timer_pwrite;
+  logic [31:0]  timer_paddr;
+  logic         timer_psel;
+  logic [31:0]  timer_pwdata;
+  logic [31:0]  timer_prdata;
+  logic         timer_pready;
+  logic         timer_pslverr;
+
+  AXI_BUS #(
+    .AXI_ADDR_WIDTH ( AxiAddrWidth       ),
+    .AXI_DATA_WIDTH ( AxiNarrowDataWidth ),
+    .AXI_ID_WIDTH   ( AxiIdWidth         ),
+    .AXI_USER_WIDTH ( AxiUserWidth       )
+  ) timer_bus();
+
+  `AXI_ASSIGN_FROM_REQ(timer_bus, periph_narrow_axi_req[Timer]);
+  `AXI_ASSIGN_TO_RESP(periph_narrow_axi_resp[Timer], timer_bus);
+
+  axi_dw_converter #(
+    .AxiSlvPortDataWidth(AxiWideDataWidth     ),
+    .AxiMstPortDataWidth(AxiNarrowDataWidth   ),
+    .AxiAddrWidth       (AxiAddrWidth         ),
+    .AxiIdWidth         (AxiIdWidth           ),
+    .AxiMaxReads        (2                    ),
+    .ar_chan_t          (soc_wide_ar_chan_t   ),
+    .mst_r_chan_t       (soc_narrow_r_chan_t  ),
+    .slv_r_chan_t       (soc_wide_r_chan_t    ),
+    .aw_chan_t          (soc_narrow_aw_chan_t ),
+    .b_chan_t           (soc_wide_b_chan_t    ),
+    .mst_w_chan_t       (soc_narrow_w_chan_t  ),
+    .slv_w_chan_t       (soc_wide_w_chan_t    ),
+    .axi_mst_req_t      (soc_narrow_req_t     ),
+    .axi_mst_resp_t     (soc_narrow_resp_t    ),
+    .axi_slv_req_t      (soc_wide_req_t       ),
+    .axi_slv_resp_t     (soc_wide_resp_t      )
+  ) i_axi_slave_timer_dwc (
+    .clk_i     (clk_i                        ),
+    .rst_ni    (ndmreset_n                   ),
+    .slv_req_i (periph_wide_axi_req[Timer]   ),
+    .slv_resp_o(periph_wide_axi_resp[Timer]  ),
+    .mst_req_o (periph_narrow_axi_req[Timer] ),
+    .mst_resp_i(periph_narrow_axi_resp[Timer])
+  );
+
+  axi2apb_64_32 #(
+      .AXI4_ADDRESS_WIDTH ( AxiAddrWidth ),
+      .AXI4_RDATA_WIDTH   ( AxiNarrowDataWidth ),
+      .AXI4_WDATA_WIDTH   ( AxiNarrowDataWidth ),
+      .AXI4_ID_WIDTH      ( AxiIdWidth   ),
+      .AXI4_USER_WIDTH    ( AxiUserWidth ),
+      .BUFF_DEPTH_SLAVE   ( 2            ),
+      .APB_ADDR_WIDTH     ( 32           )
+  ) i_axi2apb_64_32_timer (
+      .ACLK      ( clk_i               ),
+      .ARESETn   ( ndmreset_n          ),
+      .test_en_i ( 1'b0                ),
+      .AWID_i    ( timer_bus.aw_id     ),
+      .AWADDR_i  ( timer_bus.aw_addr   ),
+      .AWLEN_i   ( timer_bus.aw_len    ),
+      .AWSIZE_i  ( timer_bus.aw_size   ),
+      .AWBURST_i ( timer_bus.aw_burst  ),
+      .AWLOCK_i  ( timer_bus.aw_lock   ),
+      .AWCACHE_i ( timer_bus.aw_cache  ),
+      .AWPROT_i  ( timer_bus.aw_prot   ),
+      .AWREGION_i( timer_bus.aw_region ),
+      .AWUSER_i  ( timer_bus.aw_user   ),
+      .AWQOS_i   ( timer_bus.aw_qos    ),
+      .AWVALID_i ( timer_bus.aw_valid  ),
+      .AWREADY_o ( timer_bus.aw_ready  ),
+      .WDATA_i   ( timer_bus.w_data    ),
+      .WSTRB_i   ( timer_bus.w_strb    ),
+      .WLAST_i   ( timer_bus.w_last    ),
+      .WUSER_i   ( timer_bus.w_user    ),
+      .WVALID_i  ( timer_bus.w_valid   ),
+      .WREADY_o  ( timer_bus.w_ready   ),
+      .BID_o     ( timer_bus.b_id      ),
+      .BRESP_o   ( timer_bus.b_resp    ),
+      .BVALID_o  ( timer_bus.b_valid   ),
+      .BUSER_o   ( timer_bus.b_user    ),
+      .BREADY_i  ( timer_bus.b_ready   ),
+      .ARID_i    ( timer_bus.ar_id     ),
+      .ARADDR_i  ( timer_bus.ar_addr   ),
+      .ARLEN_i   ( timer_bus.ar_len    ),
+      .ARSIZE_i  ( timer_bus.ar_size   ),
+      .ARBURST_i ( timer_bus.ar_burst  ),
+      .ARLOCK_i  ( timer_bus.ar_lock   ),
+      .ARCACHE_i ( timer_bus.ar_cache  ),
+      .ARPROT_i  ( timer_bus.ar_prot   ),
+      .ARREGION_i( timer_bus.ar_region ),
+      .ARUSER_i  ( timer_bus.ar_user   ),
+      .ARQOS_i   ( timer_bus.ar_qos    ),
+      .ARVALID_i ( timer_bus.ar_valid  ),
+      .ARREADY_o ( timer_bus.ar_ready  ),
+      .RID_o     ( timer_bus.r_id      ),
+      .RDATA_o   ( timer_bus.r_data    ),
+      .RRESP_o   ( timer_bus.r_resp    ),
+      .RLAST_o   ( timer_bus.r_last    ),
+      .RUSER_o   ( timer_bus.r_user    ),
+      .RVALID_o  ( timer_bus.r_valid   ),
+      .RREADY_i  ( timer_bus.r_ready   ),
+      .PENABLE   ( timer_penable       ),
+      .PWRITE    ( timer_pwrite        ),
+      .PADDR     ( timer_paddr         ),
+      .PSEL      ( timer_psel          ),
+      .PWDATA    ( timer_pwdata        ),
+      .PRDATA    ( timer_prdata        ),
+      .PREADY    ( timer_pready        ),
+      .PSLVERR   ( timer_pslverr       )
+  );
+  apb_timer #(
+          .APB_ADDR_WIDTH ( 32 ),
+          .TIMER_CNT      ( 2  )
+  ) i_timer (
+      .HCLK    ( clk_i            ),
+      .HRESETn ( ndmreset_n       ),
+      .PSEL    ( timer_psel       ),
+      .PENABLE ( timer_penable    ),
+      .PWRITE  ( timer_pwrite     ),
+      .PADDR   ( timer_paddr      ),
+      .PWDATA  ( timer_pwdata     ),
+      .PRDATA  ( timer_prdata     ),
+      .PREADY  ( timer_pready     ),
+      .PSLVERR ( timer_pslverr    ),
+      .irq_o   ( irq_sources[6:3] )
+  );
 
   //////////////////////
   //       SPI        //
@@ -1076,7 +1207,8 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   assign reg_bus.error = plic_resp.error;
   assign reg_bus.ready = plic_resp.ready;
   
-  assign irq_sources[3:2] = 2'b00; 
+  assign irq_sources[2] = 1'b0;
+  assign irq_sources[NumSources-1:7] = 0;
 
   plic_top #(
     .N_SOURCE    ( NumSources  ),
