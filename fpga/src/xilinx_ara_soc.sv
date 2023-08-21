@@ -214,6 +214,7 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
     '{idx: CLINT, start_addr: CLINTBase, end_addr: CLINTBase + CLINTLength},
     '{idx: PLIC, start_addr: PLICBase, end_addr: PLICBase + PLICLength},
     '{idx: UART, start_addr: UARTBase, end_addr: UARTBase + UARTLength},
+    '{idx: Timer, start_addr: TimerBase, end_addr: TimerBase + TimerLength},
     '{idx: SPI, start_addr: SPIBase, end_addr: SPIBase + SPILength},
     '{idx: DRAM, start_addr: DRAMBase, end_addr: DRAMBase + DRAMLength}
   };
