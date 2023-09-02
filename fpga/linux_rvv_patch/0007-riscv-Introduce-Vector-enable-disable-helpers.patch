@@ -1,0 +1,42 @@
+From 5bdbd8cf7b6a93098888834069e6e9140762b93f Mon Sep 17 00:00:00 2001
+From: ckf104 <1900011634@pku.edu.cn>
+Date: Wed, 23 Aug 2023 13:58:20 +0800
+Subject: [PATCH 7/8] riscv: Introduce Vector enable/disable helpers
+
+These are small and likely to be frequently called so implement as
+inline routines (vs. function call).
+---
+ arch/riscv/include/asm/vector.h | 11 +++++++++++
+ 1 file changed, 11 insertions(+)
+
+diff --git a/arch/riscv/include/asm/vector.h b/arch/riscv/include/asm/vector.h
+index d3b090380ff4..17448f7d01c2 100644
+--- a/arch/riscv/include/asm/vector.h
++++ b/arch/riscv/include/asm/vector.h
+@@ -11,12 +11,23 @@
+ #ifdef CONFIG_RISCV_ISA_V
+ 
+ #include <asm/hwcap.h>
++#include <asm/csr.h>
+ 
+ static __always_inline bool has_vector(void)
+ {
+ 	return riscv_has_extension_unlikely(RISCV_ISA_EXT_v);
+ }
+ 
++static __always_inline void riscv_v_enable(void)
++{
++	csr_set(CSR_SSTATUS, SR_VS);
++}
++
++static __always_inline void riscv_v_disable(void)
++{
++	csr_clear(CSR_SSTATUS, SR_VS);
++}
++
+ #else /* ! CONFIG_RISCV_ISA_V  */
+ 
+ static __always_inline bool has_vector(void) { return false; }
+-- 
+2.20.1
+

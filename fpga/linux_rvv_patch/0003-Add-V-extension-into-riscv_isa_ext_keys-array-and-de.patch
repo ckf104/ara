@@ -1,0 +1,101 @@
+From f3d45a08178fdebad4dfd3cdd1f3706d57043123 Mon Sep 17 00:00:00 2001
+From: ckf104 <1900011634@pku.edu.cn>
+Date: Wed, 23 Aug 2023 12:23:25 +0800
+Subject: [PATCH 3/3] Add V-extension into riscv_isa_ext_keys array and detect
+ it with isa string parsing.
+
+---
+ arch/riscv/include/asm/hwcap.h      |  1 +
+ arch/riscv/include/asm/vector.h     | 26 ++++++++++++++++++++++++++
+ arch/riscv/include/uapi/asm/hwcap.h |  1 +
+ arch/riscv/kernel/cpufeature.c      | 10 ++++++++++
+ 4 files changed, 38 insertions(+)
+ create mode 100644 arch/riscv/include/asm/vector.h
+
+diff --git a/arch/riscv/include/asm/hwcap.h b/arch/riscv/include/asm/hwcap.h
+index 5ce50468aff1..e0d0d8c7820f 100644
+--- a/arch/riscv/include/asm/hwcap.h
++++ b/arch/riscv/include/asm/hwcap.h
+@@ -33,6 +33,7 @@ extern unsigned long elf_hwcap;
+ #define RISCV_ISA_EXT_m		('m' - 'a')
+ #define RISCV_ISA_EXT_s		('s' - 'a')
+ #define RISCV_ISA_EXT_u		('u' - 'a')
++#define RISCV_ISA_EXT_v		('v' - 'a')
+ 
+ #define RISCV_ISA_EXT_MAX	64
+ 
+diff --git a/arch/riscv/include/asm/vector.h b/arch/riscv/include/asm/vector.h
+new file mode 100644
+index 000000000000..d3b090380ff4
+--- /dev/null
++++ b/arch/riscv/include/asm/vector.h
+@@ -0,0 +1,26 @@
++/* SPDX-License-Identifier: GPL-2.0-or-later */
++/*
++ * Copyright (C) 2020 SiFive
++ */
++
++#ifndef __ASM_RISCV_VECTOR_H
++#define __ASM_RISCV_VECTOR_H
++
++#include <linux/types.h>
++
++#ifdef CONFIG_RISCV_ISA_V
++
++#include <asm/hwcap.h>
++
++static __always_inline bool has_vector(void)
++{
++	return riscv_has_extension_unlikely(RISCV_ISA_EXT_v);
++}
++
++#else /* ! CONFIG_RISCV_ISA_V  */
++
++static __always_inline bool has_vector(void) { return false; }
++
++#endif /* CONFIG_RISCV_ISA_V */
++
++#endif /* ! __ASM_RISCV_VECTOR_H */
+\ No newline at end of file
+diff --git a/arch/riscv/include/uapi/asm/hwcap.h b/arch/riscv/include/uapi/asm/hwcap.h
+index 46dc3f5ee99f..c52bb7bbbabe 100644
+--- a/arch/riscv/include/uapi/asm/hwcap.h
++++ b/arch/riscv/include/uapi/asm/hwcap.h
+@@ -21,5 +21,6 @@
+ #define COMPAT_HWCAP_ISA_F	(1 << ('F' - 'A'))
+ #define COMPAT_HWCAP_ISA_D	(1 << ('D' - 'A'))
+ #define COMPAT_HWCAP_ISA_C	(1 << ('C' - 'A'))
++#define COMPAT_HWCAP_ISA_V	(1 << ('V' - 'A'))
+ 
+ #endif /* _UAPI_ASM_RISCV_HWCAP_H */
+diff --git a/arch/riscv/kernel/cpufeature.c b/arch/riscv/kernel/cpufeature.c
+index ac202f44a670..021dcf85832f 100644
+--- a/arch/riscv/kernel/cpufeature.c
++++ b/arch/riscv/kernel/cpufeature.c
+@@ -73,6 +73,7 @@ void riscv_fill_hwcap(void)
+ 	isa2hwcap['f'] = isa2hwcap['F'] = COMPAT_HWCAP_ISA_F;
+ 	isa2hwcap['d'] = isa2hwcap['D'] = COMPAT_HWCAP_ISA_D;
+ 	isa2hwcap['c'] = isa2hwcap['C'] = COMPAT_HWCAP_ISA_C;
++	isa2hwcap['v'] = isa2hwcap['V'] = COMPAT_HWCAP_ISA_V;
+ 
+ 	elf_hwcap = 0;
+ 
+@@ -131,6 +132,15 @@ void riscv_fill_hwcap(void)
+ 		pr_info("This kernel does not support systems with F but not D\n");
+ 		elf_hwcap &= ~COMPAT_HWCAP_ISA_F;
+ 	}
++	if (elf_hwcap & COMPAT_HWCAP_ISA_V) {
++		/*
++		 * ISA string in device tree might have 'v' flag, but
++		 * CONFIG_RISCV_ISA_V is disabled in kernel.
++		 * Clear V flag in elf_hwcap if CONFIG_RISCV_ISA_V is disabled.
++		 */
++		if (!IS_ENABLED(CONFIG_RISCV_ISA_V))
++			elf_hwcap &= ~COMPAT_HWCAP_ISA_V;
++	}
+ 
+ 	memset(print_str, 0, sizeof(print_str));
+ 	for (i = 0, j = 0; i < BITS_PER_LONG; i++)
+-- 
+2.20.1
+

@@ -1,0 +1,36 @@
+From a5077a9b9834ff7a04895cd410e28ad566b10bda Mon Sep 17 00:00:00 2001
+From: ckf104 <1900011634@pku.edu.cn>
+Date: Fri, 25 Aug 2023 08:20:42 +0800
+Subject: [PATCH] riscv: add fake riscv_has_extension_likely function
+
+riscv_has_extension_[un]likely function pairs are added befor rvv patch,
+which use alternative sequences to avoid branches if results should be
+unchanged after booting. Instead of adding complete riscv_has_extension_[un]likely
+helpers, I add a simpler riscv_has_extension_unlikely function but slower
+for convenience.
+---
+ arch/riscv/include/asm/hwcap.h | 8 ++++++++
+ 1 file changed, 8 insertions(+)
+
+diff --git a/arch/riscv/include/asm/hwcap.h b/arch/riscv/include/asm/hwcap.h
+index e0d0d8c7820f..bd069205946f 100644
+--- a/arch/riscv/include/asm/hwcap.h
++++ b/arch/riscv/include/asm/hwcap.h
+@@ -45,6 +45,14 @@ bool __riscv_isa_extension_available(const unsigned long *isa_bitmap, int bit);
+ #define riscv_isa_extension_available(isa_bitmap, ext)	\
+ 	__riscv_isa_extension_available(isa_bitmap, RISCV_ISA_EXT_##ext)
+ 
++static __always_inline bool
++riscv_has_extension_unlikely(const unsigned long ext)
++{
++	compiletime_assert(ext < RISCV_ISA_EXT_MAX,
++			   "ext must be < RISCV_ISA_EXT_MAX");
++	return __riscv_isa_extension_available(NULL, ext);
++}
++
+ #endif
+ 
+ #endif /* _ASM_RISCV_HWCAP_H */
+-- 
+2.20.1
+

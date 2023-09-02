@@ -1,0 +1,37 @@
+From 150bd5744fa787c09703e85f7ea9c9e1c7acbdbb Mon Sep 17 00:00:00 2001
+From: ckf104 <1900011634@pku.edu.cn>
+Date: Wed, 23 Aug 2023 16:35:49 +0800
+Subject: [PATCH 12/14] RISC-V: rename parse_asm.h to insn.h
+
+The current parse_asm header should become a more centralized place
+for everything concerning parsing and constructing instructions.
+
+We already have a header insn-def.h similar to aarch64, so rename
+parse_asm.h to insn.h (again similar to aarch64) to show that it's
+meant for more than simple instruction parsing.
+---
+ arch/riscv/include/asm/{parse_asm.h => insn.h} | 0
+ arch/riscv/kernel/kgdb.c                       | 2 +-
+ 2 files changed, 1 insertion(+), 1 deletion(-)
+ rename arch/riscv/include/asm/{parse_asm.h => insn.h} (100%)
+
+diff --git a/arch/riscv/include/asm/parse_asm.h b/arch/riscv/include/asm/insn.h
+similarity index 100%
+rename from arch/riscv/include/asm/parse_asm.h
+rename to arch/riscv/include/asm/insn.h
+diff --git a/arch/riscv/kernel/kgdb.c b/arch/riscv/kernel/kgdb.c
+index 963ed7edcff2..45215547114c 100644
+--- a/arch/riscv/kernel/kgdb.c
++++ b/arch/riscv/kernel/kgdb.c
+@@ -11,7 +11,7 @@
+ #include <linux/string.h>
+ #include <asm/cacheflush.h>
+ #include <asm/gdb_xml.h>
+-#include <asm/parse_asm.h>
++#include <asm/insn.h>
+ 
+ enum {
+ 	NOT_KGDB_BREAK = 0,
+-- 
+2.20.1
+
