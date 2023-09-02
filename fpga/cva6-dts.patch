@@ -2754,3 +2754,48 @@ index 251310ac..a6ae831b 100644
          64'h0210011b_03249663,
          64'hf1402973_00000493,
          64'h30491073_00800913
+diff --git a/include/ariane_axi_pkg.sv b/include/ariane_axi_pkg.sv
+index 86ba3233..8e977068 100644
+--- a/include/ariane_axi_pkg.sv
++++ b/include/ariane_axi_pkg.sv
+@@ -20,7 +20,7 @@ package ariane_axi;
+     // used in axi_adapter.sv
+     typedef enum logic { SINGLE_REQ, CACHE_LINE_REQ } ad_req_t;
+ 
+-    localparam IdWidth   = 4; // Recommended by AXI standard
++    localparam IdWidth   = 3; // Recommended by AXI standard
+     localparam UserWidth = 1;
+     localparam AddrWidth = 64;
+     localparam DataWidth = 64;
+diff --git a/include/ariane_pkg.sv b/include/ariane_pkg.sv
+index 30d2da6d..e919c3f1 100644
+--- a/include/ariane_pkg.sv
++++ b/include/ariane_pkg.sv
+@@ -269,6 +269,7 @@ package ariane_pkg;
+                                                    | riscv::SSTATUS_SPIE
+                                                    | riscv::SSTATUS_SPP
+                                                    | riscv::SSTATUS_FS
++                                                   | riscv::SSTATUS_VS
+                                                    | riscv::SSTATUS_XS
+                                                    | riscv::SSTATUS_SUM
+                                                    | riscv::SSTATUS_MXR
+@@ -281,6 +282,7 @@ package ariane_pkg;
+                                                     | riscv::SSTATUS_SPIE
+                                                     | riscv::SSTATUS_SPP
+                                                     | riscv::SSTATUS_FS
++                                                    | riscv::SSTATUS_VS
+                                                     | riscv::SSTATUS_SUM
+                                                     | riscv::SSTATUS_MXR;
+ 
+diff --git a/include/riscv_pkg.sv b/include/riscv_pkg.sv
+index fd60fa4a..2bc50eb7 100644
+--- a/include/riscv_pkg.sv
++++ b/include/riscv_pkg.sv
+@@ -473,6 +473,7 @@ package riscv;
+     localparam logic [63:0] SSTATUS_SPIE = 'h00000020;
+     localparam logic [63:0] SSTATUS_SPP  = 'h00000100;
+     localparam logic [63:0] SSTATUS_FS   = 'h00006000;
++    localparam logic [63:0] SSTATUS_VS   = 'h00000600;
+     localparam logic [63:0] SSTATUS_XS   = 'h00018000;
+     localparam logic [63:0] SSTATUS_SUM  = 'h00040000;
+     localparam logic [63:0] SSTATUS_MXR  = 'h00080000;
