@@ -413,9 +413,11 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
         vinsn_queue_d.commit_pnt += 1;
 
       // Update the commit counter for the next instruction
-      if (vinsn_queue_d.commit_cnt != '0)
-        commit_cnt_d = vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vl << int'(vinsn_queue_q.vinsn[
-            vinsn_queue_d.commit_pnt].vtype.vsew);
+      if (vinsn_queue_d.commit_cnt != '0) begin
+        int unsigned skipped_bytes = vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vstart << int'(vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vtype.vsew);
+        commit_cnt_d = (vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vl << int'(vinsn_queue_q.vinsn[
+            vinsn_queue_d.commit_pnt].vtype.vsew)) - (skipped_bytes >> $clog2(8*NrLanes));
+      end
     end
 
     //////////////////////////////
@@ -433,9 +435,10 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
         issue_cnt_d = (pe_req_i.vl << int'(pe_req_i.vtype.vsew)) - (skipped_bytes >> $clog2(8*NrLanes));
         vrf_pnt_d = skipped_bytes[$clog2(8*NrLanes)-1:0];
       end
-      if (vinsn_queue_d.commit_cnt == '0)
-        commit_cnt_d = pe_req_i.vl << int'(pe_req_i.vtype.vsew);
-
+      if (vinsn_queue_d.commit_cnt == '0) begin
+        int unsigned skipped_bytes = pe_req_i.vstart << int'(pe_req_i.vtype.vsew);
+        commit_cnt_d = pe_req_i.vl << int'(pe_req_i.vtype.vsew) - (skipped_bytes >> $clog2(8*NrLanes));
+      end
       // Bump pointers and counters of the vector instruction queue
       vinsn_queue_d.accept_pnt += 1;
       vinsn_queue_d.issue_cnt += 1;
