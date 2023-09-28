@@ -224,6 +224,9 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
 
           case (pe_req_i.op)
             VLXE, VSXE: begin
+              int unsigned skipped_bytes = pe_req_d.vstart << pe_req_d.eew_vs2;
+              word_lane_ptr_d = skipped_bytes[$clog2($bits(elen_t)/8*NrLanes)-1:$clog2($bits(elen_t)/8)];
+              elm_ptr_d = skipped_bytes[$clog2($bits(elen_t)/8)-1:0] >> pe_req_d.eew_vs2;
               state_d = ADDRGEN_IDX_OP;
 
               // Load element pointers
@@ -245,14 +248,20 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
       end
       ADDRGEN: begin
         // Ara does not support misaligned AXI requests
+        // TODO: stride check for stride load/store
         if (is_addr_error(pe_req_q.scalar_op, pe_req_q.vtype.vsew)) begin
           state_d         = IDLE;
           addrgen_ack_o   = 1'b1;
           addrgen_error_o = 1'b1;
         end else begin
+          axi_addr_t start_addr;
+          if(pe_req_q.op inside {VLE, VSE})
+            start_addr = pe_req_q.scalar_op + (pe_req_q.vstart << pe_req_q.vtype.vsew);
+          // TODO: it's appropriate to use multiply here?
+          else start_addr = pe_req_q.scalar_op + (pe_req_q.vstart * pe_req_q.stride);
           addrgen_req = '{
-            addr    : pe_req_q.scalar_op,
-            len     : pe_req_q.vl,
+            addr    : start_addr,
+            len     : pe_req_q.vl - pe_req_q.vstart,
             stride  : pe_req_q.stride,
             vew     : pe_req_q.vtype.vsew,
             is_load : is_load(pe_req_q.op),
@@ -274,7 +283,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
         // Every address can generate an exception
         addrgen_req = '{
           addr    : pe_req_q.scalar_op,
-          len     : pe_req_q.vl,
+          len     : pe_req_q.vl - pe_req_q.vstart,
           stride  : pe_req_q.stride,
           vew     : pe_req_q.vtype.vsew,
           is_load : is_load(pe_req_q.op),
