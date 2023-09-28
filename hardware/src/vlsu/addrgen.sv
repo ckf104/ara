@@ -569,23 +569,16 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
             axi_addrgen_state_d = AXI_ADDRGEN_MISALIGNED;
           end
         end else if (state_q == ADDRGEN_IDX_OP && idx_addr_valid_q && !has_flight_mmu_req_q) begin
-          if(!core_st_pending_i) begin
-            ara_mmu_req_o = 1'b1;
-            has_flight_mmu_req_d = 1'b1;
-            if(axi_addrgen_q.is_load) begin
-              ara_is_store_o = 1'b0;
-            end
-            else begin
-              ara_is_store_o = 1'b1;
-            end
-            ara_vaddr_o = {idx_final_addr_q};
-            idx_addr_ready_d = 1'b1;
-            //axi_addrgen_state_d = AXI_ADDRGEN_REQUESTING;
+          ara_mmu_req_o = 1'b1;
+          has_flight_mmu_req_d = 1'b1;
+          if(axi_addrgen_q.is_load) begin
+            ara_is_store_o = 1'b0;
           end
           else begin
-            axi_addrgen_state_d = AXI_ADDRGEN_WAITING;
-            ara_mmu_req_o = 1'b0;
+            ara_is_store_o = 1'b1;
           end
+          ara_vaddr_o = {idx_final_addr_q};
+          idx_addr_ready_d = 1'b1;
         end
       end
       AXI_ADDRGEN_MISALIGNED: begin
@@ -619,17 +612,6 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
       AXI_ADDRGEN_WAITING: begin
         if (!core_st_pending_i)
           axi_addrgen_state_d = AXI_ADDRGEN_REQUESTING;
-          if (state_q == ADDRGEN_IDX_OP) begin
-            ara_mmu_req_o = 1'b1;
-            if(axi_addrgen_q.is_load) begin
-              ara_is_store_o = 1'b0;
-            end
-            else begin
-              ara_is_store_o = 1'b1;
-            end
-            ara_vaddr_o = {idx_final_addr_q};
-            idx_addr_ready_d = 1'b1;
-          end
       end
       AXI_ADDRGEN_REQUESTING : begin
         automatic logic axi_ax_ready = (axi_addrgen_q.is_load && axi_ar_ready_i) || (!
