@@ -253,7 +253,7 @@ void TEST_CASE15(void) {
   VSET(15, e32, m1);
   VCMP_U32(16, v7, 1, 2, 0xa11a9384, 0x99991348, 0x9fa831c7, 0x38197598,
            0x18931795, 0x81937598, 0x18747547, 0x3eeeeeee, 0x90139301,
-           0xab8b9148, 0x90318509, 0x31897598, 0x83195999, 0x89139848);
+           0xab8b9148, 0x90318509, 0x31897598, 0x83195999, 16);
 }
 
 //****Checking functionality with different values of EMUL and
@@ -300,9 +300,9 @@ int main(void) {
   TEST_CASE10();
   TEST_CASE11();
   TEST_CASE12();
-  // TEST_CASE13();
+  TEST_CASE13();
   TEST_CASE14();
-  // TEST_CASE15();
+  TEST_CASE15();
   TEST_CASE16();
   TEST_CASE17();
   TEST_CASE18();
