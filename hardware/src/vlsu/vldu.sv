@@ -346,7 +346,7 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
         if (vinsn_queue_d.issue_cnt != 0) begin
           int unsigned skipped_bytes = vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vstart << int'(vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vtype.vsew);
           issue_cnt_d = (vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vl << int'(vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vtype.vsew))
-             - (skipped_bytes >> $clog2(8*NrLanes));
+             - ((skipped_bytes >> $clog2(8*NrLanes)) << $clog2(8*NrLanes));
           vrf_pnt_d = skipped_bytes[$clog2(8*NrLanes)-1:0];
         end
       end
@@ -416,7 +416,7 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
       if (vinsn_queue_d.commit_cnt != '0) begin
         int unsigned skipped_bytes = vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vstart << int'(vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vtype.vsew);
         commit_cnt_d = (vinsn_queue_q.vinsn[vinsn_queue_d.commit_pnt].vl << int'(vinsn_queue_q.vinsn[
-            vinsn_queue_d.commit_pnt].vtype.vsew)) - (skipped_bytes >> $clog2(8*NrLanes));
+            vinsn_queue_d.commit_pnt].vtype.vsew)) - ((skipped_bytes >> $clog2(8*NrLanes)) << $clog2(8*NrLanes));
       end
     end
 
@@ -432,12 +432,12 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
       // Initialize counters
       if (vinsn_queue_d.issue_cnt == '0) begin
         int unsigned skipped_bytes = pe_req_i.vstart << int'(pe_req_i.vtype.vsew);
-        issue_cnt_d = (pe_req_i.vl << int'(pe_req_i.vtype.vsew)) - (skipped_bytes >> $clog2(8*NrLanes));
+        issue_cnt_d = (pe_req_i.vl << int'(pe_req_i.vtype.vsew)) - ((skipped_bytes >> $clog2(8*NrLanes)) << $clog2(8*NrLanes));
         vrf_pnt_d = skipped_bytes[$clog2(8*NrLanes)-1:0];
       end
       if (vinsn_queue_d.commit_cnt == '0) begin
         int unsigned skipped_bytes = pe_req_i.vstart << int'(pe_req_i.vtype.vsew);
-        commit_cnt_d = pe_req_i.vl << int'(pe_req_i.vtype.vsew) - (skipped_bytes >> $clog2(8*NrLanes));
+        commit_cnt_d = pe_req_i.vl << int'(pe_req_i.vtype.vsew) - ((skipped_bytes >> $clog2(8*NrLanes)) << $clog2(8*NrLanes));
       end
       // Bump pointers and counters of the vector instruction queue
       vinsn_queue_d.accept_pnt += 1;
