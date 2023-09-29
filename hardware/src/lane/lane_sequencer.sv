@@ -467,6 +467,10 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
         end
 
         VFU_StoreUnit : begin
+          vlen_t total_bytes = pe_req.vl << pe_req.vtype.vsew;
+          vlen_t ceil_vl = total_bytes[$clog2(8*NrLanes)-1:0] == 0 ?
+            (total_bytes >> $clog2(NrLanes)) >> pe_req.eew_vs1:
+            ((total_bytes >> $clog2(8*NrLanes)) + 1) << (EW64 - pe_req.eew_vs1);
           operand_request_i[StA] = '{
             id      : pe_req.id,
             vs      : pe_req.vs1,
@@ -476,12 +480,15 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             vtype   : pe_req.vtype,
             // Since this request goes outside of the lane, we might need to request an
             // extra operand regardless of whether it is valid in this lane or not.
-            vl      : pe_req.vl / NrLanes,
-            vstart  : vfu_operation_d.vstart,
+            // TODO: I think currently using scale_vl to modify vl in operand_requester
+            // is a total mess. we should set proper vl and vstart in lane_sequencer.
+            vl      : ceil_vl,
+            // the same as vl
+            vstart  : ((pe_req.vstart << pe_req.vtype.vsew ) >> $clog2(NrLanes)) >> pe_req.eew_vs1,
             hazard  : pe_req.hazard_vs1 | pe_req.hazard_vd,
             default : '0
           };
-          if (operand_request_i[StA].vl * NrLanes != pe_req.vl) operand_request_i[StA].vl += 1;
+          //if (operand_request_i[StA].vl * NrLanes != pe_req.vl) operand_request_i[StA].vl += 1;
           operand_request_push[StA] = pe_req.use_vs1;
 
           // This vector instruction uses masks
