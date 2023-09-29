@@ -286,9 +286,12 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
       else
         vinsn_queue_d.issue_pnt += 1;
 
-      if (vinsn_queue_d.issue_cnt != 0)
-        issue_cnt_d = vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vl <<
-          int'(vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vtype.vsew);
+      if (vinsn_queue_d.issue_cnt != 0)begin
+          int unsigned skipped_bytes = vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vstart << int'(vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vtype.vsew);
+          issue_cnt_d = (vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vl << int'(vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vtype.vsew))
+             - (skipped_bytes >> $clog2(8*NrLanes));
+          vrf_pnt_d = skipped_bytes[$clog2(8*NrLanes)-1:0];
+      end
     end
 
     ////////////////////////////
@@ -327,8 +330,11 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
       vinsn_running_d[pe_req_i.id]                  = 1'b1;
 
       // Initialize counters
-      if (vinsn_queue_d.issue_cnt == '0)
-        issue_cnt_d = pe_req_i.vl << int'(pe_req_i.vtype.vsew);
+      if (vinsn_queue_d.issue_cnt == '0) begin
+        int unsigned skipped_bytes = pe_req_i.vstart << int'(pe_req_i.vtype.vsew);
+        issue_cnt_d = (pe_req_i.vl << int'(pe_req_i.vtype.vsew)) - (skipped_bytes >> $clog2(8*NrLanes));
+        vrf_pnt_d = skipped_bytes[$clog2(8*NrLanes)-1:0];
+      end
 
       // Bump pointers and counters of the vector instruction queue
       vinsn_queue_d.accept_pnt += 1;

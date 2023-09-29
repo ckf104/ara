@@ -367,6 +367,8 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
         // Vl refers to current system vsew but operand requesters
         // will fetch from a register with a different eew
         ara_req_d.scale_vl      = 1'b1;
+        // set vstart = 0 to reshuffle one reg
+        ara_req_d.vstart        = 'b0;
 
         // Backend ready - Decide what to do next
         if (ara_req_ready_i) begin
@@ -644,6 +646,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     ara_req_d.use_vs2 = !insn.varith_type.vm; // vmv.v.v does not use vs2
                     // With a normal vmv.v.v, copy input eew to output
                     // to avoid unnecessary reshuffles
+                    // TODO: wrong vl if (vl_q << vsew) can't be divided evenly by (1 << eew_vs1)
                     if (insn.varith_type.vm) begin
                       ara_req_d.eew_vs1    = eew_q[ara_req_d.vs1];
                       ara_req_d.vtype.vsew = eew_q[ara_req_d.vs1];
@@ -1060,7 +1063,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b100111: begin // vmv<nr>r.v
                     automatic int unsigned vlmax;
                     // Execute also if vl == 0
-                    ignore_zero_vl_check = 1'b1;
+                    // ignore_zero_vl_check = 1'b1;
                     // The number of elements depends on the EEW we will consider
                     vlmax = VLENB >> eew_q[insn.varith_type.rs2];
                     // Rescale the maximum vector length depending on how many
@@ -1653,7 +1656,8 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     // vmv.s.x
                     ara_req_d.op      = ara_pkg::VMVSX;
                     ara_req_d.use_vs2 = 1'b0;
-                    ara_req_d.vl      = |vl_q ? 1 : '0;
+                    ara_req_d.vl      = vstart_q < vl_q ? 1 : '0;
+                    ara_req_d.vstart  = 'b0;
                     // This instruction ignores LMUL checks
                     skip_lmul_checks  = 1'b1;
                   end
@@ -2311,7 +2315,8 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                       // vmv.s.f
                       ara_req_d.op      = ara_pkg::VFMVSF;
                       ara_req_d.use_vs2 = 1'b0;
-                      ara_req_d.vl      = |vl_q ? 1 : '0;
+                      ara_req_d.vl      = vstart_q < vl_q ? 1 : '0;
+                      ara_req_d.vstart  = 'b0;
                       // This instruction ignores LMUL checks
                       skip_lmul_checks  = 1'b1;
                     end
@@ -2497,6 +2502,9 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                 end else illegal_insn = 1'b1; // Vector FP instructions are disabled
               end
             endcase
+            // clear vstart after executing one valid vector instruction
+            if(!illegal_insn)
+              vstart_d = 'b0;
           end
 
           ////////////////////
@@ -2575,6 +2583,9 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   5'b01011: begin // Unit-strided, mask load, EEW=1
                     // We operate ceil(vl/8) bytes
                     ara_req_d.vl         = (vl_q >> 3) + |vl_q[2:0];
+                    // TODO: a hacking way to calculate vstart, I'm not sure whether
+                    // it's proper to treat vstart this way
+                    ara_req_d.vstart     = (vstart_q >> 3) + (vstart_q >= vl_q);
                     ara_req_d.vtype.vsew = EW8;
                   end
                   5'b10000: begin // Unit-strided, fault-only first
@@ -2654,7 +2665,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
             // Vector whole register loads overwrite all the other decoding information.
             if (ara_req_d.op == VLE && insn.vmem_type.rs2 == 5'b01000) begin
               // Execute also if vl == 0
-              ignore_zero_vl_check = 1'b1;
+              // ignore_zero_vl_check = 1'b1;
               // The LMUL value is kept in the instruction itself
               illegal_insn     = 1'b0;
               acc_resp_o.req_ready  = 1'b0;
@@ -2693,9 +2704,11 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
               acc_resp_o.error = ara_resp_i.error;
               acc_resp_o.resp_valid = 1'b1;
               ara_req_valid_d  = 1'b0;
-              // In case of error, modify vstart
+              // In case of error, modify vstart, or clear vstart if valid
               if (ara_resp_i.error)
                 vstart_d = ara_resp_i.error_vl;
+              else
+                vstart_d = 'b0;
             end
           end
 
@@ -2788,6 +2801,9 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   5'b01011: begin // Unit-strided, mask store, EEW=1
                     // We operate ceil(vl/8) bytes
                     ara_req_d.vl         = (vl_q >> 3) + |vl_q[2:0];
+                    // TODO: a hacking way to calculate vstart, I'm not sure whether
+                    // it's proper to treat vstart this way
+                    ara_req_d.vstart     = (vstart_q >> 3) + (vstart_q >= vl_q);
                     ara_req_d.vtype.vsew = EW8;
                   end
                   default: begin // Reserved
@@ -2862,7 +2878,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
             // multiplier LMUL_1 and element width EW8. They overwrite all this decoding.
             if (ara_req_d.op == VSE && insn.vmem_type.rs2 == 5'b01000) begin
               // Execute also if vl == 0
-              ignore_zero_vl_check = 1'b1;
+              // ignore_zero_vl_check = 1'b1;
 
               // Maximum vector length. VLMAX = nf * VLEN / EW8.
               ara_req_d.vtype.vsew = EW8;
@@ -2901,9 +2917,11 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
               acc_resp_o.error = ara_resp_i.error;
               acc_resp_o.resp_valid = 1'b1;
               ara_req_valid_d  = 1'b0;
-              // If there is an error, change vstart
+              // If there is an error, change vstart, or clear vstart if valid
               if (ara_resp_i.error)
                 vstart_d = ara_resp_i.error_vl;
+              else
+                vstart_d = 'b0;
             end
           end
 
@@ -3207,7 +3225,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
 
     // Any valid non-config instruction is a NOP if vl == 0, with some exceptions,
     // e.g. whole vector memory operations / whole vector register move
-    if (is_decoding && (vl_q == '0 || null_vslideup) && !is_config &&
+    if (is_decoding && (ara_req_d.vstart >= ara_req_d.vl || null_vslideup) && !is_config &&
       !ignore_zero_vl_check && !acc_resp_o.error) begin
       // If we are acknowledging a memory operation, we must tell Ariane that the memory
       // operation was resolved (to decrement its pending load/store counter)

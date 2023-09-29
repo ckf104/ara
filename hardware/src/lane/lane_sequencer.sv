@@ -265,7 +265,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
       // Vector start calculation
       vfu_operation_d.vstart = pe_req.vstart / NrLanes;
       // If lane_id_i < vstart % NrLanes, this lane needs to execute one micro-operation less.
-      if (lane_id_i < pe_req.vstart[idx_width(NrLanes)-1:0]) vfu_operation_d.vstart -= 1;
+      if (lane_id_i < pe_req.vstart[idx_width(NrLanes)-1:0]) vfu_operation_d.vstart += 1;
 
       // Mark the vector instruction as running
       vinsn_running_d[pe_req.id] = (vfu_operation_d.vfu != VFU_None) ? 1'b1 : 1'b0;
