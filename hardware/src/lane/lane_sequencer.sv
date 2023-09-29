@@ -468,9 +468,11 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
 
         VFU_StoreUnit : begin
           vlen_t total_bytes = pe_req.vl << pe_req.vtype.vsew;
+          vlen_t skipped_bytes = (pe_req.vstart << pe_req.vtype.vsew);
           vlen_t ceil_vl = total_bytes[$clog2(8*NrLanes)-1:0] == 0 ?
             (total_bytes >> $clog2(NrLanes)) >> pe_req.eew_vs1:
             ((total_bytes >> $clog2(8*NrLanes)) + 1) << (EW64 - pe_req.eew_vs1);
+          vlen_t floor_vstart = (skipped_bytes >> $clog2(NrLanes)) >> pe_req.eew_vs1;
           operand_request_i[StA] = '{
             id      : pe_req.id,
             vs      : pe_req.vs1,
@@ -482,9 +484,9 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             // extra operand regardless of whether it is valid in this lane or not.
             // TODO: I think currently using scale_vl to modify vl in operand_requester
             // is a total mess. we should set proper vl and vstart in lane_sequencer.
-            vl      : ceil_vl,
+            vl      : ceil_vl - floor_vstart,
             // the same as vl
-            vstart  : ((pe_req.vstart << pe_req.vtype.vsew ) >> $clog2(NrLanes)) >> pe_req.eew_vs1,
+            vstart  : floor_vstart,
             hazard  : pe_req.hazard_vs1 | pe_req.hazard_vd,
             default : '0
           };
