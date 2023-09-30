@@ -152,6 +152,43 @@ void TEST_CASE5(void) {
            0x9031850931584902, 0x3189759837598759, 0x8913984898951989);
 }
 
+//******Checking functionality with different vstart value*****//
+void TEST_CASE6(){
+  VSET(12, e8, m1);
+  VLOAD_8(v1, 1, 2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 15);
+  VLOAD_8(v2, 1, 2, 3, 4, 5, 7, 8, 9, 11, 12, 13, 15);
+  write_csr(vstart, 3);
+  asm volatile("vluxei8.v v1, (%0), v2" ::"r"(&ALIGNED_I8[0]));
+  VCMP_U8(19, v1, 0x1, 0x2, 0x3, 0x84, 0x48, 0x88, 0x88, 0xae, 0x91, 0x02,
+          0x59, 0x89);
+  
+  VSET(12, e16, m1);
+  VLOAD_16(v1, 2, 4, 6, 8, 10, 14, 16, 18, 22, 24, 26, 30);
+  VLOAD_16(v2, 2, 4, 6, 8, 10, 14, 16, 18, 22, 24, 26, 30);
+  write_csr(vstart, 5);
+  asm volatile("vluxei16.v v1, (%0), v2" ::"r"(&ALIGNED_I16[0]));
+  VCMP_U16(20, v1, 0x2, 0x4, 0x6, 0x8, 0xa, 0x9388, 0x8188,
+           0x11ae, 0x4891, 0x4902, 0x8759, 0x1989);
+  
+  VSET(12, e32, m1);
+  VLOAD_32(v1, 4, 8, 12, 16, 20, 28, 32, 36, 44, 48, 52, 60);
+  VLOAD_32(v2, 4, 8, 12, 16, 20, 28, 32, 36, 44, 48, 52, 60);
+  write_csr(vstart, 1);
+  asm volatile("vluxei32.v v1, (%0), v2" ::"r"(&ALIGNED_I32[0]));
+  VCMP_U32(21, v1, 0x4, 0xa11a9384, 0x99991348, 0x9fa831c7, 0x38197598,
+           0x81937598, 0x18747547, 0x3eeeeeee, 0xab8b9148, 0x90318509,
+           0x31897598, 0x89139848);
+  
+  VSET(12, e64, m1);
+  VLOAD_64(v1, 8, 16, 24, 32, 40, 56, 64, 72, 88, 96, 104, 120);
+  VLOAD_64(v2, 8, 16, 24, 32, 40, 56, 64, 72, 88, 96, 104, 120);
+  write_csr(vstart, 4);
+  asm volatile("vluxei64.v v1, (%0), v2" ::"r"(&ALIGNED_I64[0]));
+  VCMP_U64(22, v1, 0x8, 0x10, 0x18, 0x20, 0x3819759853987548, 0x81937598aa819388,
+           0x1874754791888188, 0x3eeeeeeee33111ae, 0xab8b914891484891,
+           0x9031850931584902, 0x3189759837598759, 0x8913984898951989);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -161,6 +198,7 @@ int main(void) {
   TEST_CASE3();
   TEST_CASE4();
   TEST_CASE5();
+  TEST_CASE6();
 
   EXIT_CHECK();
 }
