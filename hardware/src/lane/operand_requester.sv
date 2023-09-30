@@ -247,13 +247,16 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
       logic is_widening;
       // One-bit counters
       logic [NrVInsn-1:0] waw_hazard_counter;
+      // we stall hazard instruction when vstart != 0
+      logic non_zero_vstart;
     } requester_d, requester_q;
 
 
     // Is there a hazard during this cycle?
     logic stall;
-    assign stall = |(requester_q.hazard & ~(vinsn_result_written_q &
-                   (~{NrVInsn{requester_q.is_widening}} | requester_q.waw_hazard_counter)));
+    assign stall = (|(requester_q.hazard & ~(vinsn_result_written_q &
+                   (~{NrVInsn{requester_q.is_widening}} | requester_q.waw_hazard_counter)))) ||
+                   requester_q.non_zero_vstart;
 
     // Did we get a grant?
     logic [NrBanks-1:0] operand_requester_gnt;
@@ -328,6 +331,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
               vew         : operand_request_i[requester].eew,
               hazard      : operand_request_i[requester].hazard,
               is_widening : operand_request_i[requester].cvt_resize == CVT_WIDE,
+              non_zero_vstart : operand_request_i[requester].vstart != '0,
               default: '0
             };
             // temporarily hacking vl of store operand.
@@ -414,6 +418,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
                              operand_request_i[requester].vl,
                   vew    : operand_request_i[requester].eew,
                   hazard : operand_request_i[requester].hazard,
+                  non_zero_vstart : operand_request_i[requester].vstart != 0,
                   default: '0
                 };
                 // The length should be at least one after the rescaling
