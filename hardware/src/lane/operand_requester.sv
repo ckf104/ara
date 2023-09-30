@@ -256,7 +256,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
     logic stall;
     assign stall = (|(requester_q.hazard & ~(vinsn_result_written_q &
                    (~{NrVInsn{requester_q.is_widening}} | requester_q.waw_hazard_counter)))) ||
-                   requester_q.non_zero_vstart;
+                   (requester_q.non_zero_vstart && |requester_q.hazard);
 
     // Did we get a grant?
     logic [NrBanks-1:0] operand_requester_gnt;
