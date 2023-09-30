@@ -240,7 +240,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
               endcase
 
               // Load element counter
-              idx_op_cnt_d = pe_req_i.vl;
+              idx_op_cnt_d = pe_req_i.vl - pe_req_i.vstart;
             end
             default: state_d = ADDRGEN;
           endcase
