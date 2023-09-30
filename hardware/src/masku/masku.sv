@@ -1080,8 +1080,13 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
 
       // Initialize counters
       if (vinsn_queue_d.issue_cnt == '0) begin
+        int unsigned skipped_bytes = pe_req_i.vstart << int'(pe_req_i.vtype.vsew);
         issue_cnt_d = pe_req_i.vl;
-        read_cnt_d  = pe_req_i.vl;
+        // Round down vstart to the nearest multiple of (8*NrLanes >> vsew),
+        // we don't need to init vrf_seq_byte by remaining offset of vstart,
+        // because calculated mask will not be used by other unit
+        read_cnt_d  = pe_req_i.vl - (((skipped_bytes >> $clog2(8*NrLanes)) <<
+          $clog2(8*NrLanes)) >> int'(pe_req_i.vtype.vsew));
 
         // Trim skipped words
         if (pe_req_i.op == VSLIDEUP) begin

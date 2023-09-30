@@ -429,6 +429,12 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
         end
         VFU_LoadUnit : begin
           vlen_t total_bytes, ceil_vl, floor_vstart;
+          // We round up mask_vl to multiple of 64*NrLanes >> sew, but there is no need to
+          // round down mask_vstart.
+          vlen_t ceil_mask_vl = pe_req.vl[$clog2(64*NrLanes)-1:0] == 0 ?
+            (pe_req.vl >> $clog2(8*NrLanes)) >> pe_req.vtype.vsew:
+            ((pe_req.vl >> $clog2(64*NrLanes)) + 1) << (EW64 - pe_req.vtype.vsew);
+          vlen_t floor_mask_vstart = (pe_req.vstart >> $clog2(8*NrLanes)) >> pe_req.vtype.vsew;
           // This vector instruction uses masks
           operand_request_i[MaskM] = '{
             id     : pe_req.id,
@@ -437,13 +443,11 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             vtype  : pe_req.vtype,
             // Since this request goes outside of the lane, we might need to request an
             // extra operand regardless of whether it is valid in this lane or not.
-            vl     : (pe_req.vl / NrLanes / 8) >> int'(pe_req.vtype.vsew),
-            vstart : vfu_operation_d.vstart,
+            vl     : ceil_mask_vl - floor_mask_vstart,
+            vstart : floor_mask_vstart,
             hazard : pe_req.hazard_vm | pe_req.hazard_vd,
             default: '0
           };
-          if ((operand_request_i[MaskM].vl << int'(pe_req.vtype.vsew)) *
-              NrLanes * 8 != pe_req.vl) operand_request_i[MaskM].vl += 1;
           operand_request_push[MaskM] = !pe_req.vm;
 
           // Load indexed
