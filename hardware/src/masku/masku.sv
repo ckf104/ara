@@ -1118,7 +1118,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
         result_final_gnt_d = '0;
       end
       if (vinsn_queue_d.commit_cnt == '0) begin
-        commit_cnt_d = pe_req_i.vl;
+        int unsigned skipped_bytes = pe_req_i.vstart << int'(pe_req_i.vtype.vsew);
+        commit_cnt_d = pe_req_i.vl - (((skipped_bytes >> $clog2(8*NrLanes)) <<
+          $clog2(8*NrLanes)) >> int'(pe_req_i.vtype.vsew));
         // Trim skipped words
         if (pe_req_i.op == VSLIDEUP)
           commit_cnt_d -= vlen_t'(trimmed_stride);
