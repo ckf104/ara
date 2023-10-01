@@ -5,6 +5,9 @@
 #include "long_array.h"
 #include "vector_macros.h"
 #define AXI_DWIDTH 128
+
+static volatile uint32_t GOLD_TMP_I32[512] __attribute__((aligned(AXI_DWIDTH))) = {};
+
 // Exception Handler for rtl
 
 void mtvec_handler(void) {
@@ -283,6 +286,38 @@ void TEST_CASE19(void) {
   LVCMP_U32(19, v16, LONG_I32);
 }
 
+// masked load with different vstart value, assume vlen >= 2048
+void TEST_CASE20(void) {
+  uint32_t mask = 0xAAAAAAAA;
+  uint64_t vstart = 1;
+#define INIT(vstart, vl) \
+  for(uint32_t i=0; i < vl; ++i){ \
+    if(i < vstart) GOLD_TMP_I32[i] = 0; \
+    else GOLD_TMP_I32[i] = (i % 2 == 1) ? LONG_I32[i] : 0; \
+  }
+
+  INIT(vstart, 256);
+
+  VSET(256, e32, m4);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask));
+  asm volatile("vmv.v.x v4, %[A]" ::[A] "r"(0));
+  write_csr(vstart, vstart);
+  asm volatile("vle32.v v4, (%0), v0.t" ::"r"(&LONG_I32[0]));
+  LVCMP_U32(20, v4, GOLD_TMP_I32);
+
+  vstart = 254;
+  INIT(vstart, 256);
+
+  VSET(256, e32, m4);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask));
+  asm volatile("vmv.v.x v4, %[A]" ::[A] "r"(0));
+  write_csr(vstart, vstart);
+  asm volatile("vle32.v v4, (%0), v0.t" ::"r"(&LONG_I32[0]));
+  LVCMP_U32(21, v4, GOLD_TMP_I32);
+
+#undef INIT
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -307,5 +342,6 @@ int main(void) {
   TEST_CASE17();
   TEST_CASE18();
   TEST_CASE19();
+  TEST_CASE20();
   EXIT_CHECK();
 }
