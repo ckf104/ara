@@ -331,7 +331,11 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
               vew         : operand_request_i[requester].eew,
               hazard      : operand_request_i[requester].hazard,
               is_widening : operand_request_i[requester].cvt_resize == CVT_WIDE,
-              non_zero_vstart : operand_request_i[requester].vstart != '0,
+              // TODO: Currently, we need to stall if vstart of instruction instead of this lane
+              // is not zero. Especially for MaskM queue, whose vstart can be zero even though
+              // instruction vstart is a big one, which causes that vd register is written from
+              // very high-order byte.
+              non_zero_vstart : operand_request_i[requester].non_zero_vstart,
               default: '0
             };
             // temporarily hacking vl of store operand.
@@ -418,7 +422,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
                              operand_request_i[requester].vl,
                   vew    : operand_request_i[requester].eew,
                   hazard : operand_request_i[requester].hazard,
-                  non_zero_vstart : operand_request_i[requester].vstart != 0,
+                  non_zero_vstart : operand_request_i[requester].non_zero_vstart,
                   default: '0
                 };
                 // The length should be at least one after the rescaling
