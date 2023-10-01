@@ -529,7 +529,10 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                 // Checking only lmul_q is a trick: we want to stall only if both lmuls have
                 // zero MSB. If lmul_q has zero MSB, it's greater than lmul_d only if also
                 // lmul_d has zero MSB since the slice comparison is intrinsically unsigned
-                if (!vtype_q.vlmul[2] && (vtype_d.vlmul[2:0] < vtype_q.vlmul[2:0]))
+
+                // TODO: We temporarily drain the pipeline when the LMUL changes to avoid implicit
+                // register label hazards. It can be optimized after reconsidering hazard detection.
+                if (vtype_d.vlmul[2:0] != vtype_q.vlmul[2:0])
                   state_d = WAIT_IDLE;
               end
 
