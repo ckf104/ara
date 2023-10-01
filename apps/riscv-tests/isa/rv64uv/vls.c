@@ -164,6 +164,56 @@ void TEST_CASE14(void) {
            0x9013930148815808, 0, 0x8319599991911111);
 }
 
+// Masked stride load with different vstart value
+void TEST_CASE15(void) {
+  uint8_t mask8 = 0xAA;
+  uint16_t mask16 = ((uint16_t)mask8 << 8) | mask8;
+  uint32_t mask32 = ((uint32_t)mask16 << 16) | mask16;
+  uint64_t mask64 = ((uint64_t)mask32 << 32) | mask32;
+  uint64_t stride = 0;
+  volatile uint64_t INP1[] = {
+      0x9fe419208f2e05e0, 0xf9aa71f0c394bbd3, 0xa11a9384a7163840,
+      0x99991348a9f38cd1, 0x9fa831c7a11a9384, 0x3819759853987548,
+      0x1893179501093489, 0x81937598aa819388, 0x1874754791888188,
+      0x3eeeeeeee33111ae, 0x9013930148815808, 0xab8b914891484891,
+      0x9031850931584902, 0x3189759837598759, 0x8319599991911111,
+      0x8913984898951989};
+
+  stride = 16;
+  VSET(8, e64, m1);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask64));
+  VCLEAR(v1);
+  write_csr(vstart, 5);
+  asm volatile("vlse64.v v1, (%0), %1, v0.t" ::"r"(INP1), "r"(stride));
+  VCMP_U64(15, v1, 0, 0, 0, 0, 0, 0x9013930148815808, 0, 0x8319599991911111);
+
+  stride = 8;
+  VSET(16, e32, m1);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask32));
+  VCLEAR(v1);
+  write_csr(vstart, 12);
+  asm volatile("vlse32.v v1, (%0), %1, v0.t" ::"r"(INP1), "r"(stride));
+  VCMP_U32(16, v1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x37598759, 0, 0x98951989);
+
+  stride = 4;
+  VSET(16, e16, m1);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask16));
+  VCLEAR(v1);
+  write_csr(vstart, 3);
+  asm volatile("vlse16.v v1, (%0), %1, v0.t" ::"r"(INP1), "r"(stride));
+  VCMP_U16(17, v1, 0, 0, 0, 0x71f0, 0, 0x9384, 0, 0x1348, 0, 0x31c7,
+           0, 0x7598, 0, 0x1795, 0, 0x7598);
+
+  stride = 3;
+  VSET(16, e8, m1);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask8));
+  VCLEAR(v1);
+  write_csr(vstart, 1);
+  asm volatile("vlse8.v v1, (%0), %1, v0.t" ::"r"(INP1), "r"(stride));
+  VCMP_U8(18, v1, 0, 0x8f, 0, 0xbb, 0, 0xf9, 0, 0x93, 0, 0xa9,
+           0, 0x93, 0, 0x9f, 0, 0x75);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -185,6 +235,8 @@ int main(void) {
   TEST_CASE12();
   TEST_CASE13();
   TEST_CASE14();
+
+  TEST_CASE15();
 
   EXIT_CHECK();
 }
