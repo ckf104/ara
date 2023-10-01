@@ -318,6 +318,26 @@ void TEST_CASE20(void) {
 #undef INIT
 }
 
+// implicit WAW dependency with different LMUL
+void TEST_CASE21(void) {
+  uint64_t vstart = 255;
+  for(uint32_t i=0; i < 254; ++i){
+    GOLD_TMP_I32[i] = 0;
+  }
+  GOLD_TMP_I32[254] = (uint32_t)LONG_I64[255];
+  GOLD_TMP_I32[255] = (uint32_t)(LONG_I64[255] >> 32);
+
+  VSET(256, e32, m4);
+  asm volatile("vmv.v.x v4, %[A]" ::[A] "r"(0));
+  VSET(256, e64, m8);
+  write_csr(vstart, vstart);
+  // The vle64 has a implicit WAW dependency on the first one.
+  // We set vstart a big value to complete it quickly.
+  asm volatile("vle64.v v0, (%[A])" ::[A] "r"(&LONG_I64[0]));
+  VSET(256, e32, m4);
+  LVCMP_U32(22, v4, GOLD_TMP_I32);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -343,5 +363,6 @@ int main(void) {
   TEST_CASE18();
   TEST_CASE19();
   TEST_CASE20();
+  TEST_CASE21();
   EXIT_CHECK();
 }
