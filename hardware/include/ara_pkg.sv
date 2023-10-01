@@ -1012,6 +1012,8 @@ package ara_pkg;
 
     // Hazards
     logic [NrVInsn-1:0] hazard;
+    // we stall hazard instruction when vstart != 0
+    logic non_zero_vstart;
   } operand_request_cmd_t;
 
   typedef struct packed {
