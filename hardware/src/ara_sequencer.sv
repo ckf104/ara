@@ -305,23 +305,44 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
             ///////////////
 
             // RAW
-            if (ara_req_i.use_vs1) pe_req_d.hazard_vs1[write_list_d[ara_req_i.vs1].vid] |=
-              write_list_d[ara_req_i.vs1].valid;
-            if (ara_req_i.use_vs2) pe_req_d.hazard_vs2[write_list_d[ara_req_i.vs2].vid] |=
-              write_list_d[ara_req_i.vs2].valid;
+            if (ara_req_i.use_vs1) begin
+              for(int i=0; i < 8; ++i) begin : cal_vs1_hazard
+                rvv_pkg::vlmul_e lmul_vs1 = ara_req_i.emul - ara_req_i.vtype.vsew + ara_req_i.eew_vs1;
+                logic active = i == 0 || (!lmul_vs1[0] && (1 << lmul_vs1) > i);
+                pe_req_d.hazard_vs1[write_list_d[ara_req_i.vs1 + i].vid] |=
+                  active && write_list_d[ara_req_i.vs1 + i].valid;
+              end
+            end
+            if (ara_req_i.use_vs2) begin
+              for(int i=0; i < 8; ++i) begin : cal_vs2_hazard
+                rvv_pkg::vlmul_e lmul_vs2 = ara_req_i.emul - ara_req_i.vtype.vsew + ara_req_i.eew_vs2;
+                logic active = i == 0 || (!lmul_vs2[0] && (1 << lmul_vs2) > i);
+                pe_req_d.hazard_vs2[write_list_d[ara_req_i.vs2 + i].vid] |=
+                  active && write_list_d[ara_req_i.vs2 + i].valid;
+              end
+            end
             if (!ara_req_i.vm) pe_req_d.hazard_vm[write_list_d[VMASK].vid] |=
               write_list_d[VMASK].valid;
 
             // WAR
             if (ara_req_i.use_vd) begin
-              pe_req_d.hazard_vs1[read_list_d[ara_req_i.vd].vid] |= read_list_d[ara_req_i.vd].valid;
-              pe_req_d.hazard_vs2[read_list_d[ara_req_i.vd].vid] |= read_list_d[ara_req_i.vd].valid;
-              pe_req_d.hazard_vm[read_list_d[ara_req_i.vd].vid] |= read_list_d[ara_req_i.vd].valid;
+              for(int i=0; i < 8; ++i) begin : cal_war_vd_hazard
+                logic active = i == 0 || (!pe_req_d.emul[0] && (1 << pe_req_d.emul) > i);
+                logic is_hazard = active && read_list_d[ara_req_i.vd + i].valid;
+                pe_req_d.hazard_vs1[read_list_d[ara_req_i.vd + i].vid] |= is_hazard;
+                pe_req_d.hazard_vs2[read_list_d[ara_req_i.vd + i].vid] |= is_hazard;
+                pe_req_d.hazard_vm[read_list_d[ara_req_i.vd + i].vid] |= is_hazard;
+              end
             end
 
             // WAW
-            if (ara_req_i.use_vd) pe_req_d.hazard_vd[write_list_d[ara_req_i.vd].vid] |=
-              write_list_d[ara_req_i.vd].valid;
+            if (ara_req_i.use_vd) begin
+              for(int i=0; i < 8; ++i) begin : cal_war_vd_hazard
+                logic active = i == 0 || (!pe_req_d.emul[0] && (1 << pe_req_d.emul) > i);
+                pe_req_d.hazard_vd[write_list_d[ara_req_i.vd + i].vid] |=
+                  write_list_d[ara_req_i.vd + i].valid;
+              end
+            end
 
             /////////////
             //  Issue  //
@@ -410,11 +431,28 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
               pe_req_valid_d = 1'b1;
 
               // Mark that this vector instruction is writing to vector vd
-              if (ara_req_i.use_vd) write_list_d[ara_req_i.vd] = '{vid: vinsn_id_n, valid: 1'b1};
+              if (ara_req_i.use_vd) begin
+                for(int i=0; i < 8; ++i) begin : update_readlist_vd
+                  logic active = i == 0 || (!pe_req_d.emul[0] && (1 << pe_req_d.emul) > i);
+                  if(active) write_list_d[ara_req_i.vd + i] = '{vid: vinsn_id_n, valid: 1'b1};
+                end
+              end
 
               // Mark that this loop is reading vs
-              if (ara_req_i.use_vs1) read_list_d[ara_req_i.vs1] = '{vid: vinsn_id_n, valid: 1'b1};
-              if (ara_req_i.use_vs2) read_list_d[ara_req_i.vs2] = '{vid: vinsn_id_n, valid: 1'b1};
+              if (ara_req_i.use_vs1) begin
+                for(int i=0; i < 8; ++i) begin : update_readlist_vs1
+                  rvv_pkg::vlmul_e lmul_vs1 = ara_req_i.emul - ara_req_i.vtype.vsew + ara_req_i.eew_vs1;
+                  logic active = i == 0 || (!lmul_vs1[0] && (1 << lmul_vs1) > i);
+                  if(active) read_list_d[ara_req_i.vs1 + i] = '{vid: vinsn_id_n, valid: 1'b1};
+                end
+              end
+              if (ara_req_i.use_vs2) begin
+                for(int i=0; i < 8; ++i) begin : update_readlist_vs2
+                  rvv_pkg::vlmul_e lmul_vs2 = ara_req_i.emul - ara_req_i.vtype.vsew + ara_req_i.eew_vs2;
+                  logic active = i == 0 || (!lmul_vs2[0] && (1 << lmul_vs2) > i);
+                  if(active) read_list_d[ara_req_i.vs2 + i] = '{vid: vinsn_id_n, valid: 1'b1};
+                end
+              end
               if (!ara_req_i.vm) read_list_d[VMASK]             = '{vid: vinsn_id_n, valid: 1'b1};
             end
           end else ara_req_ready_o = 1'b0; // Wait until the PEs are ready
