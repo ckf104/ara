@@ -348,6 +348,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
         // These generate a reshuffle request to Ara's backend
         // When LMUL > 1, not all the regs that compose a large
         // register should always be reshuffled
+        ara_req_d.emul          = LMUL_1;
         ara_req_valid_d         = ~rs_mask_request_q;
         ara_req_d.use_scalar_op = 1'b1;
         ara_req_d.vs2           = vs_buffer_q;
@@ -386,6 +387,8 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
 
             // Prepare the information to reshuffle the vector registers during the next cycles
             // Reshuffle in the following order: vd, v2, v1. The order is arbitrary.
+            // TODO: when there are at least two set of operands to reshuffle, we will get wrong
+            // sew at second time.
             unique casez (reshuffle_req_d)
               3'b??1: begin
                 eew_old_buffer_d = eew_q[insn.vmem_type.rd];
@@ -3128,6 +3131,13 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
       // This operation is costly when occurs, so avoid it if possible
       if (ara_req_valid_d && !acc_resp_o.error) begin
         automatic rvv_instruction_t insn = rvv_instruction_t'(acc_req_i.insn.instr);
+        logic [4:0] vd_limit = ara_req_d.vd + (1 << ara_req_d.vtype.vsew);
+        logic [4:0] vs1_limit = ara_req_d.vs1 + (1 << ara_req_d.eew_vs1);
+        logic [4:0] vs2_limit = ara_req_d.vs2 + (1 << ara_req_d.eew_vs2);
+        logic vd_vs1_overlap = (ara_req_d.vd >= ara_req_d.vs1 && ara_req_d.vd < vs1_limit) ||
+                                (ara_req_d.vs1 >= ara_req_d.vd && ara_req_d.vs1 < vd_limit);
+        logic vd_vs2_overlap = (ara_req_d.vd >= ara_req_d.vs2 && ara_req_d.vd < vs2_limit) ||
+                                (ara_req_d.vs2 >= ara_req_d.vd && ara_req_d.vs2 < vd_limit);
 
         // Is the instruction an in-lane one and could it be subject to reshuffling?
         in_lane_op = ara_req_d.op inside {[VADD:VMERGE]} || ara_req_d.op inside {[VREDSUM:VMSBC]} ||
@@ -3138,9 +3148,18 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
         reshuffle_req_d = {ara_req_d.use_vs1 && (ara_req_d.eew_vs1    != eew_q[ara_req_d.vs1]) && eew_valid_q[ara_req_d.vs1] && in_lane_op,
                            ara_req_d.use_vs2 && (ara_req_d.eew_vs2    != eew_q[ara_req_d.vs2]) && eew_valid_q[ara_req_d.vs2] && in_lane_op,
                            ara_req_d.use_vd  && (ara_req_d.vtype.vsew != eew_q[ara_req_d.vd ]) && eew_valid_q[ara_req_d.vd ] && vl_q != (VLENB >> ara_req_d.vtype.vsew)};
+        // Big hacking for operand overlaping! we behave as tail agnostic setting. I don't know
+        // how to implement tail undisturbed setting with current reshuffle logic.
+        if (ara_req_d.use_vd && ((ara_req_d.use_vs1 && vd_vs1_overlap) || (ara_req_d.use_vs2 && vd_vs2_overlap)))
+          reshuffle_req_d[0] = 1'b0;
 
         // Prepare the information to reshuffle the vector registers during the next cycles
         // Reshuffle in the following order: vd, v2, v1. The order is arbitrary.
+        // TODO: in section 5.2 of rvv spec 1.0, it says that source operand register can
+        // overlaps destination, e.g. vs1 = v0 and vd = v0 with EEWs = EW32 and EEWd = EW16,
+        // Which means that vd must be the first one in the reshuffle order. But a big problem
+        // occurs, when vd is partially written with tail undisturbed setting, that we will
+        // partially write vd with a mismatch eew!
         unique casez (reshuffle_req_d)
           3'b??1: begin
             eew_old_buffer_d = eew_q[insn.vmem_type.rd];
@@ -3191,6 +3210,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
     end
 
     // Update the EEW
+    // TODO: consider page fault load/store, updating is too early?
     if (ara_req_valid_d && ara_req_d.use_vd && ara_req_ready_i) begin
       unique case (ara_req_d.emul)
         LMUL_1: begin
