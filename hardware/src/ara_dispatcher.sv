@@ -437,7 +437,8 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
             endcase
 
             // Mask the next request if we don't need to reshuffle the next reg
-            if (eew_new_buffer_d == eew_old_buffer_d) rs_mask_request_d = 1'b1;
+            if (eew_new_buffer_d == eew_old_buffer_d || !eew_valid_q[vs_buffer_d])
+              rs_mask_request_d = 1'b1;
           end
         end
       end
@@ -3144,6 +3145,8 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
         // Annotate which registers need a reshuffle -> |vs1|vs2|vd|
         // Optimization: reshuffle vs1 and vs2 only if the operation is strictly in-lane
         // Optimization: reshuffle vd only if we are not overwriting the whole vector register!
+        // TODO: only considering one register to determine reshuffling is not enough. Additionally,
+        // we need to take use_vd_op into consideration.
         reshuffle_req_d = {ara_req_d.use_vs1 && (ara_req_d.eew_vs1    != eew_q[ara_req_d.vs1]) && eew_valid_q[ara_req_d.vs1] && in_lane_op,
                            ara_req_d.use_vs2 && (ara_req_d.eew_vs2    != eew_q[ara_req_d.vs2]) && eew_valid_q[ara_req_d.vs2] && in_lane_op,
                            ara_req_d.use_vd  && (ara_req_d.vtype.vsew != eew_q[ara_req_d.vd ]) && eew_valid_q[ara_req_d.vd ] && vl_q != (VLENB >> ara_req_d.vtype.vsew)};
