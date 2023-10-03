@@ -2742,7 +2742,8 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
             // Ara does not reshuffle source vregs upon vector stores,
             // thus the operand requesters will fetch Bytes referring
             // to the encoding of the source register
-            ara_req_d.scale_vl = 1'b1;
+            // don't need to rescale since we have done it in lane_sequencer
+            // ara_req_d.scale_vl = 1'b1;
 
             // These generate a request to Ara's backend
             ara_req_d.vs1       = insn.vmem_type.rd; // vs3 is encoded in the same position as rd

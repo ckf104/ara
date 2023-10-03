@@ -338,8 +338,6 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
               non_zero_vstart : operand_request_i[requester].non_zero_vstart,
               default: '0
             };
-            // temporarily hacking vl of store operand.
-            if(requester == StA) requester_d.len = operand_request_i[requester].vl;
             // The length should be at least one after the rescaling
             if (requester_d.len == '0)
               requester_d.len = 1;
