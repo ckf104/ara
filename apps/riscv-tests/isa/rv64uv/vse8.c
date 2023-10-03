@@ -5,6 +5,9 @@
 #include "vector_macros.h"
 
 #define AXI_DWIDTH 128
+
+static volatile uint8_t GOLD_TMP_I8[512] __attribute__((aligned(AXI_DWIDTH))) = {};
+
 void mtvec_handler(void) {
   asm volatile("csrr t0, mcause"); // Read mcause
 
@@ -307,6 +310,40 @@ void TEST_CASE16(void) {
   asm volatile("vse8.v v8, (%0)" ::"r"(ALIGNED_I8));
   LVVCMP_U8(16, ALIGNED_I8, LONG_I8);
 }
+
+// masked load with different vstart value, assume vlen >= 2048
+void TEST_CASE17(void) {
+  uint8_t mask = 0xAA;
+  uint64_t vstart = 61;
+#define INIT(vstart, vl) \
+  for(uint32_t i=0; i < vl; ++i){ \
+    if(i < vstart) GOLD_TMP_I8[i] = 0; \
+    else GOLD_TMP_I8[i] = (i % 2 == 1) ? LONG_I8[i] : 0; \
+    ALIGNED_I8[i] = 0; \
+  }
+
+  INIT(vstart, 256);
+
+  VSET(256, e8, m1);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask));
+  asm volatile("vle8.v v3, (%0)" ::"r"(&LONG_I8[0]));
+  write_csr(vstart, vstart);
+  asm volatile("vse8.v v3, (%0), v0.t" ::"r"(&ALIGNED_I8[0]));
+  LVVCMP_U8(17, GOLD_TMP_I8, ALIGNED_I8);
+
+  vstart = 174;
+  INIT(vstart, 256);
+
+  VSET(256, e8, m1);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask));
+  asm volatile("vle8.v v3, (%0)" ::"r"(&LONG_I8[0]));
+  write_csr(vstart, vstart);
+  asm volatile("vse8.v v3, (%0), v0.t" ::"r"(&ALIGNED_I8[0]));
+  LVVCMP_U8(18, GOLD_TMP_I8, ALIGNED_I8);
+
+#undef INIT
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -328,6 +365,7 @@ int main(void) {
   TEST_CASE14();
   TEST_CASE15();
   TEST_CASE16();
+  TEST_CASE17();
 
   EXIT_CHECK();
 }
