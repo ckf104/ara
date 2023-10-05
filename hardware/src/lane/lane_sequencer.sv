@@ -435,7 +435,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           operand_request_push[MaskM] = !pe_req.vm;
         end
         VFU_LoadUnit : begin
-          vlen_t total_bytes, ceil_vl, floor_vstart;
+          vlen_t total_index_bytes, ceil_vl, floor_vstart;
           // We round up mask_vl to multiple of 64*NrLanes >> sew, but there is no need to
           // round down mask_vstart.
           vlen_t ceil_mask_vl = pe_req.vl[$clog2(64*NrLanes)-1:0] == 0 ?
@@ -461,10 +461,10 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           // Load indexed
           // We round up vl to multiple of 8*NrLanes >> sew, but there is no need to
           // round down vstart.
-          assign total_bytes = pe_req.vl << pe_req.eew_vs2;
-          assign ceil_vl = total_bytes[$clog2(8*NrLanes)-1:0] == 0 ?
+          assign total_index_bytes = pe_req.vl << pe_req.eew_vs2;
+          assign ceil_vl = total_index_bytes[$clog2(8*NrLanes)-1:0] == 0 ?
             (pe_req.vl >> $clog2(NrLanes)) : 
-            ((total_bytes >> $clog2(8*NrLanes)) + 1) << (EW64 - pe_req.eew_vs2);
+            ((total_index_bytes >> $clog2(8*NrLanes)) + 1) << (EW64 - pe_req.eew_vs2);
           assign floor_vstart = pe_req.vstart >> $clog2(NrLanes);
           operand_request_i[SlideAddrGenA] = '{
             id       : pe_req.id,
@@ -486,6 +486,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
         VFU_StoreUnit : begin
           // Compared with LoadUnit, we need to scale vl for StA operand,
           // a bit more work to round vl and vstart.
+          vlen_t total_index_bytes = pe_req.vl << pe_req.eew_vs2;
           vlen_t total_bytes = pe_req.vl << pe_req.vtype.vsew;
           vlen_t skipped_bytes = (pe_req.vstart << pe_req.vtype.vsew);
           vlen_t ceil_sta_vl = total_bytes[$clog2(8*NrLanes)-1:0] == 0 ?
@@ -536,10 +537,10 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           };
           operand_request_push[MaskM] = !pe_req.vm;
 
-          assign ceil_idx_vl = total_bytes[$clog2(8*NrLanes)-1:0] == 0 ?
-            (total_bytes >> $clog2(NrLanes)) >> pe_req.eew_vs2:
-            ((total_bytes >> $clog2(8*NrLanes)) + 1) << (EW64 - pe_req.eew_vs2);
-          assign floor_idx_vstart = (skipped_bytes >> $clog2(NrLanes)) >> pe_req.eew_vs2;
+          assign ceil_idx_vl = total_index_bytes[$clog2(8*NrLanes)-1:0] == 0 ?
+            pe_req.vl >> $clog2(NrLanes) :
+            ((total_index_bytes >> $clog2(8*NrLanes)) + 1) << (EW64 - pe_req.eew_vs2);
+          assign floor_idx_vstart = pe_req.vstart >> $clog2(NrLanes);
 
           // Store indexed
           operand_request_i[SlideAddrGenA] = '{
