@@ -437,7 +437,7 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
       end
       if (vinsn_queue_d.commit_cnt == '0) begin
         int unsigned skipped_bytes = pe_req_i.vstart << int'(pe_req_i.vtype.vsew);
-        commit_cnt_d = pe_req_i.vl << int'(pe_req_i.vtype.vsew) - ((skipped_bytes >> $clog2(8*NrLanes)) << $clog2(8*NrLanes));
+        commit_cnt_d = (pe_req_i.vl << int'(pe_req_i.vtype.vsew)) - ((skipped_bytes >> $clog2(8*NrLanes)) << $clog2(8*NrLanes));
       end
       // Bump pointers and counters of the vector instruction queue
       vinsn_queue_d.accept_pnt += 1;
