@@ -160,10 +160,10 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   //  Spill-reg from the lanes  //
   ////////////////////////////////
 
+  elen_t [NrLanes-1:0] wdata_flat;
   elen_t [NrLanes-1:0] sldu_operand;
   logic  [NrLanes-1:0] sldu_operand_valid;
   logic  [NrLanes-1:0] sldu_operand_ready;
-  target_fu_e [NrLanes-1:0] sldu_operand_target_fu_d, sldu_operand_target_fu_q;
 
   // Don't handshake if the operands target the addrgen!
   // Moreover, when computing NP2 slides, loop over the same data!
@@ -182,9 +182,6 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
   } np2_loop_mux_e;
   np2_loop_mux_e np2_loop_mux_sel_d, np2_loop_mux_sel_q;
 
-  logic slide_np2_buf_valid_d, slide_np2_buf_valid_q;
-
-
   for (genvar l = 0; l < NrLanes; l++) begin
     spill_register #(
       .T(elen_t)
@@ -199,30 +196,17 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       .data_o (sldu_operand[l]            )
     );
 
-    assign sldu_operand_d[l] = np2_loop_mux_sel_q == NP2_EXT_SEL
-                             ? sldu_operand_i[l]
-                             : result_queue_q[NP2_BUFFER_PNT][l].wdata;
+    assign sldu_operand_d[l] = sldu_operand_i[l];
 
-    assign sldu_operand_valid_d[l] = (sldu_operand_target_fu_q[l] == ALU_SLDU)
-                                   ? (np2_loop_mux_sel_q == NP2_EXT_SEL
-                                     ? sldu_operand_valid_i[l]
-                                     : slide_np2_buf_valid_q)
+    assign sldu_operand_valid_d[l] = (sldu_operand_target_fu_i[l] == ALU_SLDU)
+                                   ? sldu_operand_valid_i[l]
                                    : 1'b0;
 
-    assign sldu_operand_ready_o[l] = (sldu_operand_target_fu_q[l] == ALU_SLDU)
-                                   ? (np2_loop_mux_sel_q == NP2_EXT_SEL
-                                     ? sldu_operand_ready_q[l]
-                                     : 1'b0)
-                                   : 1'b0;
-  end
+    // SlideAddrGenA operand queue is shared by sldu and vlsu. We block fake ready signal
+    // when operand is not sent to us.
+    assign sldu_operand_ready_o[l] = sldu_operand_ready_q[l] & sldu_operand_valid_d[l];
 
-  assign sldu_operand_target_fu_d = sldu_operand_target_fu_i;
-
-  always_ff @(posedge clk_i or negedge rst_ni) begin
-    if (!rst_ni)
-      sldu_operand_target_fu_q <= target_fu_e'(1'b0);
-    else
-      sldu_operand_target_fu_q <= sldu_operand_target_fu_d;
+    assign wdata_flat[l] = result_queue_q[NP2_BUFFER_PNT][l].wdata;
   end
 
   //////////////////////////
@@ -424,7 +408,6 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     p2_stride_gen_update_d = 1'b0;
 
     np2_loop_mux_sel_d    = np2_loop_mux_sel_q;
-    slide_np2_buf_valid_d = slide_np2_buf_valid_q;
 
     red_stride_cnt_d_wide = {red_stride_cnt_q, red_stride_cnt_q[idx_width(NrLanes)-1]};
 
@@ -432,7 +415,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
     pe_req_ready_o = !vinsn_queue_full;
 
     // Slide Unit DP
-    sld_op_src  = sldu_operand;
+    sld_op_src  = np2_loop_mux_sel_q == NP2_LOOP_SEL ? wdata_flat : sldu_operand;
     sld_eew_src = (vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu})
                 ? vinsn_issue_q.vtype.vsew
                 : vinsn_issue_q.eew_vs2;
@@ -533,6 +516,7 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
           automatic int byte_count = in_byte_count < out_byte_count ? in_byte_count : out_byte_count;
 
           // Build the sequential byte-output-enable
+          // TODO: we should sub byte_count from output_limit_q per cycle?
           for (int unsigned b = 0; b < 8*NrLanes; b++)
             if ((b >= out_pnt_q && b < output_limit_q) || vinsn_issue_q.vfu inside {VFU_Alu, VFU_MFpu})
               out_en_seq[b] = 1'b1;
@@ -685,10 +669,6 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
             vinsn_queue_d.issue_cnt -= 1;
           end
         end
-        if (state_q == SLIDE_NP2_COMMIT)
-          if (slide_np2_buf_valid_q && sldu_operand_ready_q[0])
-            // Reset the buffer-valid if the buffer is read, by default
-            slide_np2_buf_valid_d = 1'b0;
       end
       SLIDE_RUN_OSUM: begin
         // Short Note: For ordered sum reduction instruction, only one lane has a valid data, and it is sent to the next lane
@@ -734,37 +714,30 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
         // Prepare the read pointer
         result_queue_read_pnt_d = NP2_RESULT_PNT;
         // Setup the mux sel as soon as we get one operand
-        if (sldu_operand_valid_i[0])
+        if (&sldu_operand_valid && result_queue_empty) begin
           np2_loop_mux_sel_d = NP2_LOOP_SEL;
-        // Setup the p2-stride generator
-        p2_stride_gen_stride_d = stride_t'(vinsn_issue_q.stride >> vinsn_issue_q.vtype.vsew);
-        p2_stride_gen_valid_d  = 1'b1;
-        // Start processing the first VRF chunk as soon as the result queue is completely empty
-        if (np2_loop_mux_sel_q == NP2_LOOP_SEL && result_queue_empty) begin
+          // Setup the p2-stride generator
+          p2_stride_gen_stride_d = stride_t'(vinsn_issue_q.stride >> vinsn_issue_q.vtype.vsew);
+          p2_stride_gen_valid_d  = 1'b1;
+          sld_slamt = p2_stride_gen_stride_q;
+          for (int unsigned l = 0; l < NrLanes; l++)
+            result_queue_d[NP2_BUFFER_PNT][l].wdata = sld_op_dst[l];
           state_d = SLIDE_NP2_RUN;
         end
       end
       SLIDE_NP2_RUN: begin
-        // Reset the buffer-valid if the buffer is read, by default
-        if (slide_np2_buf_valid_q && sldu_operand_ready_q[0])
-          slide_np2_buf_valid_d = 1'b0;
         // Setup the current p2 stride
         sld_slamt = p2_stride_gen_stride_q;
         // Slide the operands as soon as valid
-        if (&sldu_operand_valid) begin
-          for (int unsigned l = 0; l < NrLanes; l++)
-            result_queue_d[result_queue_write_pnt_q][l].wdata = sld_op_dst[l];
-          slide_np2_buf_valid_d = 1'b1;
-          // Operands correctly read
-          sldu_operand_ready     = '1;
-          // Update the p2 stride
-          p2_stride_gen_update_d = 1'b1;
-          // Commit the final result
-          if (p2_stride_gen_popc_q == {'0, 1'b1} && result_queue_empty) begin
-            state_d = SLIDE_NP2_COMMIT;
-            // Prepare the write pointer
-            result_queue_write_pnt_d = NP2_RESULT_PNT;
-          end
+        for (int unsigned l = 0; l < NrLanes; l++)
+          result_queue_d[result_queue_write_pnt_q][l].wdata = sld_op_dst[l];
+        // Update the p2 stride
+        p2_stride_gen_update_d = 1'b1;
+        // Commit the final result
+        if (p2_stride_gen_popc_q == {'0, 1'b1} && result_queue_empty) begin
+          state_d = SLIDE_NP2_COMMIT;
+          // Prepare the write pointer
+          result_queue_write_pnt_d = NP2_RESULT_PNT;
         end
       end
       SLIDE_NP2_WAIT: begin
@@ -898,7 +871,6 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       result_final_gnt_q    <= '0;
       red_stride_cnt_q      <= 1;
       np2_loop_mux_sel_q    <= NP2_EXT_SEL;
-      slide_np2_buf_valid_q <= 1'b0;
     end else begin
       vinsn_running_q       <= vinsn_running_d;
       issue_cnt_q           <= issue_cnt_d;
@@ -912,7 +884,6 @@ module sldu import ara_pkg::*; import rvv_pkg::*; #(
       result_final_gnt_q    <= result_final_gnt_d;
       red_stride_cnt_q      <= red_stride_cnt_d;
       np2_loop_mux_sel_q    <= np2_loop_mux_sel_d;
-      slide_np2_buf_valid_q <= slide_np2_buf_valid_d;
     end
   end
 

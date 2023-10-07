@@ -24,23 +24,18 @@ module p2_stride_gen import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
 
   `include "common_cells/registers.svh"
 
-  logic   [idx_width(idx_width(8*NrLanes)):0] popc_d, popc_q;
-  logic [idx_width(idx_width(8*NrLanes))-1:0] next_stride_first_d, next_stride_first_q;
-  logic            [idx_width(8*NrLanes)-1:0] next_spare_stride, next_stride;
-  logic            [idx_width(8*NrLanes)-1:0] spare_stride_d, spare_stride_q;
-  logic                                       ff_en, next_stride_zero_d, next_stride_zero_q;
+  logic   [idx_width(idx_width(8*NrLanes)):0] popc_d;
+  logic [idx_width(idx_width(8*NrLanes))-1:0] next_stride_first_d;
+  logic            [idx_width(8*NrLanes)-1:0] next_spare_stride_d, next_spare_stride_q, next_stride;
+  logic                                       ff_en, next_stride_zero_d;
 
-  assign next_stride = valid_i ? stride_i : next_spare_stride;
-  assign next_spare_stride = spare_stride_q ^ stride_p2_o;
-  assign popc_o  = popc_q;
+  assign next_stride = valid_i ? stride_i : next_spare_stride_q;
+  assign next_spare_stride_d = next_stride ^ stride_p2_o;
+  assign popc_o  = popc_d;
   assign ff_en   = valid_i | update_i;
-  assign valid_o = ~next_stride_zero_q;
-  assign spare_stride_d = next_stride;
+  assign valid_o = ~next_stride_zero_d;
 
-  `FFL(             popc_q,              popc_d, ff_en, '0);
-  `FFL(next_stride_first_q, next_stride_first_d, ff_en, '0);
-  `FFL( next_stride_zero_q,  next_stride_zero_d, ff_en, '0);
-  `FFL(     spare_stride_q,      spare_stride_d, ff_en, '0);
+  `FFL(next_spare_stride_q, next_spare_stride_d, ff_en, '0);
 
   // Is the stride power of two?
   popcount #(
@@ -63,8 +58,8 @@ module p2_stride_gen import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   always_comb begin
     stride_p2_o = '0;
     for (int b = 0; b < idx_width(8*NrLanes); b++)
-      if (b == next_stride_first_q)
-        stride_p2_o[b] = ~next_stride_zero_q;
+      if (b == next_stride_first_d)
+        stride_p2_o[b] = ~next_stride_zero_d;
   end
 
 endmodule
