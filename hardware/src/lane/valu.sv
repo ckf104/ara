@@ -309,7 +309,8 @@ module valu import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width;
   logic first_op_d, first_op_q;
 
   // Signal to indicate the state of the ALU
-  typedef enum logic [2:0] {NO_REDUCTION, INTRA_LANE_REDUCTION, INTER_LANES_REDUCTION_RX, INTER_LANES_REDUCTION_TX, LN0_REDUCTION_COMMIT, SIMD_REDUCTION} alu_state_e;
+  typedef enum logic [2:0] {NO_REDUCTION, INTRA_LANE_REDUCTION, INTER_LANES_REDUCTION_RX,
+  INTER_LANES_REDUCTION_TX, LN0_REDUCTION_COMMIT, SIMD_REDUCTION, ALU_WAIT} alu_state_e;
   alu_state_e alu_state_d, alu_state_q;
 
   // Reductions commit by zeroing the commit counter
@@ -700,7 +701,8 @@ module valu import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width;
               end
 
               // Commit and give the done to the main sequencer
-              commit_cnt_d = '0;
+              // commit_cnt_d = '0;
+              alu_state_d = ALU_WAIT;
 
               // Bump pointers and counters of the result queue
               result_queue_valid_d[result_queue_write_pnt_q] = 1'b1;
@@ -721,7 +723,7 @@ module valu import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width;
     //////////////////////////////////
 
     alu_result_wdata_o = result_queue_q[result_queue_read_pnt_q].wdata;
-    if (alu_state_q == NO_REDUCTION || (alu_state_q == SIMD_REDUCTION && simd_red_cnt_q == simd_red_cnt_max_q)) begin
+    if (alu_state_q == NO_REDUCTION || (alu_state_q == SIMD_REDUCTION && simd_red_cnt_q == simd_red_cnt_max_q) || alu_state_q == ALU_WAIT) begin
       alu_result_req_o = result_queue_valid_q[result_queue_read_pnt_q] & ((alu_state_q == SIMD_REDUCTION) || !result_queue_q[result_queue_read_pnt_q].mask);
     end else begin
       alu_result_req_o = 1'b0;
@@ -751,6 +753,7 @@ module valu import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width;
       // Don't do it in case of a reduction
       if (!is_reduction(vinsn_commit.op))
         commit_cnt_d = commit_cnt_q - (1 << (int'(EW64) - vinsn_commit.vtype.vsew));
+      else commit_cnt_d = '0;
       if (commit_cnt_q < (1 << (int'(EW64) - vinsn_commit.vtype.vsew))) commit_cnt_d = '0;
     end
 
