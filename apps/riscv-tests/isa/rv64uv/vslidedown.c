@@ -166,6 +166,16 @@ void TEST_CASE5() {
   VCMP_U32(17, v1, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19);
 }
 
+void TEST_CASE6() {
+  uint64_t TMP_I64[32];
+  for(int i=0; i < 32; ++i) TMP_I64[i] = i;
+  VSET(16, e64, m1);
+  asm volatile("vl1re64.v v2, (%0)" ::"r"(TMP_I64));
+  // slideup has a RAW dependency on vl1re64.v
+  asm volatile("vslidedown.vi v1, v2, 16");
+  VCMP_U64(18, v1, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, 27, 28, 29, 30, 31);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -176,6 +186,7 @@ int main(void) {
   TEST_CASE4();
 
   TEST_CASE5();
+  TEST_CASE6();
 
   EXIT_CHECK();
 }

@@ -989,7 +989,8 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   6'b001011: ara_req_d.op = ara_pkg::VXOR;
                   6'b001110: begin
                     ara_req_d.op            = ara_pkg::VSLIDEUP;
-                    ara_req_d.stride        = {{ELEN{insn.varith_type.rs1[19]}}, insn.varith_type.rs1};
+                    // slideup should zero-extend the immediate
+                    ara_req_d.stride        = {59'b0, insn.varith_type.rs1};
                     ara_req_d.eew_vs2       = vtype_q.vsew;
                     // Encode vslideup/vslide1up on the use_scalar_op field
                     ara_req_d.use_scalar_op = 1'b0;
@@ -1001,7 +1002,8 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   end
                   6'b001111: begin
                     ara_req_d.op            = ara_pkg::VSLIDEDOWN;
-                    ara_req_d.stride        = {{ELEN{insn.varith_type.rs1[19]}}, insn.varith_type.rs1};
+                    // slidedown shold zero-extend the immediate
+                    ara_req_d.stride        = {59'b0, insn.varith_type.rs1};
                     ara_req_d.eew_vs2       = vtype_q.vsew;
                     // Encode vslidedown/vslide1down on the use_scalar_op field
                     ara_req_d.use_scalar_op = 1'b0;
