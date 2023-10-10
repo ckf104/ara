@@ -33,7 +33,8 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     input  logic                            alu_vinsn_done_i,
     input  logic                            mfpu_vinsn_done_i,
     // Interface with the operand requesters
-    output logic [NrVInsn-1:0][NrVInsn-1:0] global_hazard_table_o,
+    output logic [NrVInsn-1:0][NrVInsn-1:0][NrHazardOperands-1:0] global_hazard_table_o,
+    output logic [NrVInsn-1:0][NrVInsn-1:0][NrHazardOperands-1:0] global_write_hazard_table_o,
     // Only the slide unit can answer with a scalar response
     input  elen_t                           pe_scalar_resp_i,
     input  logic                            pe_scalar_resp_valid_i,
@@ -110,6 +111,8 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   /////////////////////////
 
   // Global table of the dependencies between instructions
+  // global_hazard_table_d is used to record RAW hazard.
+  // global_write_hazard_table_d is used to record WAR or WAR hazard.
   //
   // The row at index N is the hazard vector belonging to instruction N
   // It indicates all the instruction on which instruction N depends
@@ -126,9 +129,21 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   // | Insn 3 |      1 |      0 |      1 |      0 |
   // +--------+--------+--------+--------+--------+
   //
-  // This information is forwarded to the operand requesters of each lane
+  // The third dimension of the table is used to indicate the hazard operand.
+  // Example 1: global_hazard_table_d[0][1][H_VS1] == 1 indicates that instruction 0
+  // has a RAW hazard on vs1 operand with instruction 1.
+  // Example 2: global_hazard_table_d[0][1][H_VD] == 1 indicates that instruction 0
+  // has a RAW hazard on vd operand with instruction 1, if use_vd_op == 1 of instruction 0
+  // Example 3: global_write_hazard_table_d[0][1][H_VS2] == 1 indicates that instruction 0
+  // has a WAR hazard on vs1 operand of instruction 1.
+  // Actually, each riscv vector instruction that use vd as an operand will also write to vd.
+  // So global_hazard_table_d[i][j][H_VD] == global_write_hazard_table_d[i][j][H_VD] should
+  // always be true.
+  //
+  // This information is forwarded to the lane sequencer of each lane
 
-  logic [NrVInsn-1:0][NrVInsn-1:0] global_hazard_table_d;
+  logic [NrVInsn-1:0][NrVInsn-1:0][NrHazardOperands-1:0] global_hazard_table_d;
+  logic [NrVInsn-1:0][NrVInsn-1:0][NrHazardOperands-1:0] global_write_hazard_table_d;
 
   /////////////////
   //  Sequencer  //
@@ -140,11 +155,15 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   // For hazard detection, we need to know which vector instruction is reading/writing to each
   // vector register
   typedef struct packed {
+    hazard_operand_t op;
+    logic valid;
+  } vreg_read_access_t;
+  /* typedef struct packed {
     vid_t vid;
     logic valid;
-  } vreg_access_t;
-  vreg_access_t [31:0] read_list_d, read_list_q;
-  vreg_access_t [31:0] write_list_d, write_list_q;
+  } vreg_write_access_t; */
+  vreg_read_access_t [31:0][NrVInsn-1:0] read_list_d, read_list_q;
+  logic [31:0][NrVInsn-1:0] write_list_d, write_list_q;
 
   // Show whether current instruction will access this register
   logic [7:0] active_vd, active_vs1, active_vs2;
@@ -263,6 +282,7 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     read_list_d           = read_list_q;
     write_list_d          = write_list_q;
     global_hazard_table_d = global_hazard_table_o;
+    global_write_hazard_table_d = global_write_hazard_table_o;
 
     active_vd = 'b0;
     active_vs1 = 'b0;
@@ -284,8 +304,10 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
 
     // Update vector register's access list
     for (int unsigned v = 0; v < 32; v++) begin
-      read_list_d[v].valid &= vinsn_running_q[read_list_q[v].vid] ;
-      write_list_d[v].valid &= vinsn_running_q[write_list_q[v].vid];
+      for (int unsigned vec_id = 0; vec_id < NrVInsn; ++vec_id) begin
+        read_list_d[v][vec_id].valid &= vinsn_running_q[vec_id];
+        write_list_d[v][vec_id] &= vinsn_running_q[vec_id];
+      end
     end
 
     // Update the running vector instructions
@@ -316,38 +338,49 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
               for(int i=0; i < 8; ++i) begin : cal_vs1_hazard
                 rvv_pkg::vlmul_e lmul_vs1 = ara_req_i.emul - ara_req_i.vtype.vsew + ara_req_i.eew_vs1;
                 active_vs1[i] = i == 0 || (!lmul_vs1[2] && (1 << lmul_vs1) > i);
-                pe_req_d.hazard_vs1[write_list_d[ara_req_i.vs1 + i].vid] |=
-                  active_vs1[i] && write_list_d[ara_req_i.vs1 + i].valid;
+                for(int vec_id = 0; vec_id < NrVInsn; ++vec_id) begin
+                  global_hazard_table_d[vinsn_id_n][vec_id][H_VS1] |=
+                    active_vs1[i] && write_list_d[ara_req_i.vs1 + i[4:0]][vec_id];
+                end
               end
             end
             if (ara_req_i.use_vs2) begin
               for(int i=0; i < 8; ++i) begin : cal_vs2_hazard
                 rvv_pkg::vlmul_e lmul_vs2 = ara_req_i.emul - ara_req_i.vtype.vsew + ara_req_i.eew_vs2;
                 active_vs2[i] = i == 0 || (!lmul_vs2[2] && (1 << lmul_vs2) > i);
-                pe_req_d.hazard_vs2[write_list_d[ara_req_i.vs2 + i].vid] |=
-                  active_vs2[i] && write_list_d[ara_req_i.vs2 + i].valid;
+                for(int vec_id = 0; vec_id < NrVInsn; ++vec_id) begin
+                  global_hazard_table_d[vinsn_id_n][vec_id][H_VS2] |=
+                    active_vs2[i] && write_list_d[ara_req_i.vs2 + i[4:0]][vec_id];
+                end
               end
             end
-            if (!ara_req_i.vm) pe_req_d.hazard_vm[write_list_d[VMASK].vid] |=
-              write_list_d[VMASK].valid;
+            if (!ara_req_i.vm) begin
+              for(int vec_id = 0; vec_id < NrVInsn; ++vec_id) begin
+                global_hazard_table_d[vinsn_id_n][vec_id][H_VM] |=
+                  write_list_d[VMASK][vec_id];
+              end
+            end
 
             // WAR
             if (ara_req_i.use_vd) begin
               for(int i=0; i < 8; ++i) begin : cal_war_vd_hazard
-                logic is_hazard;
                 active_vd[i] = i == 0 || (!ara_req_i.emul[2] && (1 << ara_req_i.emul) > i);
-                assign is_hazard = active_vd[i] && read_list_d[ara_req_i.vd + i].valid;
-                pe_req_d.hazard_vs1[read_list_d[ara_req_i.vd + i].vid] |= is_hazard;
-                pe_req_d.hazard_vs2[read_list_d[ara_req_i.vd + i].vid] |= is_hazard;
-                pe_req_d.hazard_vm[read_list_d[ara_req_i.vd + i].vid] |= is_hazard;
+                for(int vec_id = 0; vec_id < NrVInsn; ++vec_id) begin
+                  global_write_hazard_table_d[vinsn_id_n][vec_id][read_list_d[ara_req_i.vd + i[4:0]][vec_id].op] |=
+                    active_vd[i] && read_list_d[ara_req_i.vd + i[4:0]][vec_id].valid;
+                end
               end
             end
 
             // WAW
             if (ara_req_i.use_vd) begin
-              for(int i=0; i < 8; ++i) begin : cal_war_vd_hazard
-                pe_req_d.hazard_vd[write_list_d[ara_req_i.vd + i].vid] |=
-                  write_list_d[ara_req_i.vd + i].valid && active_vd[i];
+              for(int i=0; i < 8; ++i) begin : cal_waw_vd_hazard
+                for(int vec_id = 0; vec_id < NrVInsn; ++vec_id) begin
+                  global_write_hazard_table_d[vinsn_id_n][vec_id][H_VD] |=
+                    active_vd[i] && write_list_d[ara_req_i.vd + i[4:0]][vec_id];
+                  global_hazard_table_d[vinsn_id_n][vec_id][H_VD] |=
+                    active_vd[i] && write_list_d[ara_req_i.vd + i[4:0]][vec_id];
+                end
               end
             end
 
@@ -387,76 +420,55 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
               vl            : ara_req_i.vl,
               vstart        : ara_req_i.vstart,
               vtype         : ara_req_i.vtype,
-              hazard_vd     : pe_req_d.hazard_vd,
-              hazard_vm     : pe_req_d.hazard_vm,
-              hazard_vs1    : pe_req_d.hazard_vs1,
-              hazard_vs2    : pe_req_d.hazard_vs2,
               default       : '0
             };
+            // Acknowledge instruction
+            ara_req_ready_o = 1'b1;
 
-            // Populate the global hazard table
-            global_hazard_table_d[vinsn_id_n] = pe_req_d.hazard_vd  | pe_req_d.hazard_vm |
-                                                pe_req_d.hazard_vs1 | pe_req_d.hazard_vs2;
+            // Remember that the vector instruction is running
+            unique case (vfu(ara_req_i.op))
+              VFU_LoadUnit : pe_vinsn_running_d[NrLanes + OffsetLoad][vinsn_id_n]  = 1'b1;
+              VFU_StoreUnit: pe_vinsn_running_d[NrLanes + OffsetStore][vinsn_id_n] = 1'b1;
+              VFU_SlideUnit: pe_vinsn_running_d[NrLanes + OffsetSlide][vinsn_id_n] = 1'b1;
+              VFU_MaskUnit : pe_vinsn_running_d[NrLanes + OffsetMask][vinsn_id_n]  = 1'b1;
+              VFU_None     : ;
+              default: for (int l = 0; l < NrLanes; l++)
+                  // Instruction is running on the lanes
+                  pe_vinsn_running_d[l][vinsn_id_n] = 1'b1;
+            endcase
 
-            // We only issue instructions that take no operands if they have no hazards.
-            // Moreover, SLIDE instructions cannot be always chained
-            // ToDo: optimize the case for vslide1down, vslide1up (wait 2 cycles, then chain)
-            if (!(|{ara_req_i.use_vs1, ara_req_i.use_vs2, ara_req_i.use_vd_op, !ara_req_i.vm}) &&
-                |{pe_req_d.hazard_vs1, pe_req_d.hazard_vs2, pe_req_d.hazard_vm, pe_req_d.hazard_vd} ||
-                (pe_req_d.op == VSLIDEUP && |{pe_req_d.hazard_vd, pe_req_d.hazard_vs1, pe_req_d.hazard_vs2}) ||
-                (pe_req_d.op == VSLIDEDOWN && |{pe_req_d.hazard_vs1, pe_req_d.hazard_vs2}))
-            begin
+            // Masked vector instructions also run on the mask unit
+            pe_vinsn_running_d[NrLanes + OffsetMask][vinsn_id_n] |= !ara_req_i.vm;
+
+            // Some instructions need to wait for an acknowledgment
+            // before being committed with Ariane
+            if (is_load(ara_req_i.op) || is_store(ara_req_i.op) || !ara_req_i.use_vd) begin
               ara_req_ready_o = 1'b0;
-              pe_req_valid_d  = 1'b0;
-            end else begin
-              // Acknowledge instruction
-              ara_req_ready_o = 1'b1;
-
-              // Remember that the vector instruction is running
-              unique case (vfu(ara_req_i.op))
-                VFU_LoadUnit : pe_vinsn_running_d[NrLanes + OffsetLoad][vinsn_id_n]  = 1'b1;
-                VFU_StoreUnit: pe_vinsn_running_d[NrLanes + OffsetStore][vinsn_id_n] = 1'b1;
-                VFU_SlideUnit: pe_vinsn_running_d[NrLanes + OffsetSlide][vinsn_id_n] = 1'b1;
-                VFU_MaskUnit : pe_vinsn_running_d[NrLanes + OffsetMask][vinsn_id_n]  = 1'b1;
-                VFU_None     : ;
-                default: for (int l = 0; l < NrLanes; l++)
-                    // Instruction is running on the lanes
-                    pe_vinsn_running_d[l][vinsn_id_n] = 1'b1;
-              endcase
-
-              // Masked vector instructions also run on the mask unit
-              pe_vinsn_running_d[NrLanes + OffsetMask][vinsn_id_n] |= !ara_req_i.vm;
-
-              // Some instructions need to wait for an acknowledgment
-              // before being committed with Ariane
-              if (is_load(ara_req_i.op) || is_store(ara_req_i.op) || !ara_req_i.use_vd) begin
-                ara_req_ready_o = 1'b0;
-                state_d         = WAIT;
-              end
-
-              // Issue the instruction
-              pe_req_valid_d = 1'b1;
-
-              // Mark that this vector instruction is writing to vector vd
-              if (ara_req_i.use_vd) begin
-                for(int i=0; i < 8; ++i) begin : update_readlist_vd
-                  if(active_vd[i]) write_list_d[ara_req_i.vd + i] = '{vid: vinsn_id_n, valid: 1'b1};
-                end
-              end
-
-              // Mark that this loop is reading vs
-              if (ara_req_i.use_vs1) begin
-                for(int i=0; i < 8; ++i) begin : update_readlist_vs1
-                  if(active_vs1[i]) read_list_d[ara_req_i.vs1 + i] = '{vid: vinsn_id_n, valid: 1'b1};
-                end
-              end
-              if (ara_req_i.use_vs2) begin
-                for(int i=0; i < 8; ++i) begin : update_readlist_vs2
-                  if(active_vs2[i]) read_list_d[ara_req_i.vs2 + i] = '{vid: vinsn_id_n, valid: 1'b1};
-                end
-              end
-              if (!ara_req_i.vm) read_list_d[VMASK]             = '{vid: vinsn_id_n, valid: 1'b1};
+              state_d         = WAIT;
             end
+
+            // Issue the instruction
+            pe_req_valid_d = 1'b1;
+
+            // Mark that this vector instruction is writing to vector vd
+            if (ara_req_i.use_vd) begin
+              for(int i=0; i < 8; ++i) begin : update_readlist_vd
+                if(active_vd[i]) write_list_d[ara_req_i.vd + i[4:0]][vinsn_id_n]= 1'b1;
+              end
+            end
+
+            // Mark that this loop is reading vs
+            if (ara_req_i.use_vs1) begin
+              for(int i=0; i < 8; ++i) begin : update_readlist_vs1
+                if(active_vs1[i]) read_list_d[ara_req_i.vs1 + i[4:0]][vinsn_id_n]= '{op: H_VS1, valid: 1'b1};
+              end
+            end
+            if (ara_req_i.use_vs2) begin
+              for(int i=0; i < 8; ++i) begin : update_readlist_vs2
+                if(active_vs2[i]) read_list_d[ara_req_i.vs2 + i[4:0]][vinsn_id_n]= '{op: H_VS2, valid: 1'b1};
+              end
+            end
+            if (!ara_req_i.vm) read_list_d[VMASK][vinsn_id_n] = '{op: H_VM, valid: 1'b1};
           end else ara_req_ready_o = 1'b0; // Wait until the PEs are ready
         end
       end
@@ -495,7 +507,12 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     endcase
 
     // Update the global hazard table
-    for (int id = 0; id < NrVInsn; id++) global_hazard_table_d[id] &= vinsn_running_d;
+    for (int id = 0; id < NrVInsn; id++) begin
+      for (int id2 = 0; id2 < NrVInsn; id2++) begin
+        global_hazard_table_d[id][id2] &= {NrHazardOperands{vinsn_running_d[id2]}};
+        global_write_hazard_table_d[id][id2] &= {NrHazardOperands{vinsn_running_d[id2]}};
+      end
+    end
   end : p_sequencer
 
   always_ff @(posedge clk_i or negedge rst_ni) begin: p_sequencer_ff
@@ -512,6 +529,7 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
       gold_ticket_q   <= 1'b0;
 
       global_hazard_table_o <= '0;
+      global_write_hazard_table_o <= '0;
 
       running_mask_insn_q <= 1'b0;
     end else begin
@@ -527,6 +545,7 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
       gold_ticket_q   <= gold_ticket_d;
 
       global_hazard_table_o <= global_hazard_table_d;
+      global_write_hazard_table_o <= global_write_hazard_table_d;
 
       running_mask_insn_q <= running_mask_insn_d;
     end

@@ -17,9 +17,11 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
   ) (
     input  logic                                       clk_i,
     input  logic                                       rst_ni,
-    // Interface with the main sequencer
-    input  logic            [NrVInsn-1:0][NrVInsn-1:0] global_hazard_table_i,
     // Interface with the lane sequencer
+    input  logic [NrVInsn-1:0][NrHazardOperands-1:0]   insn_readable_i,
+    input  logic [NrVInsn-1:0]                         insn_writable_i,
+    output logic [NrVInsn-1:0][NrHazardOperands-1:0]   update_read_o,
+    output logic [NrVInsn-1:0]                         update_write_o,
     input  operand_request_cmd_t [NrOperandQueues-1:0] operand_request_i,
     input  logic                 [NrOperandQueues-1:0] operand_request_valid_i,
     output logic                 [NrOperandQueues-1:0] operand_request_ready_o,
@@ -176,6 +178,9 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
   // Instruction wrote a result
   logic [NrVInsn-1:0] vinsn_result_written_d, vinsn_result_written_q;
 
+  logic [NrOperandQueues-1:0][NrVInsn-1:0][NrHazardOperands-1:0] update;
+  logic [NrVInsn-1:0][NrHazardOperands-1:0][NrOperandQueues-1:0] update_trans;
+
   always_comb begin
     vinsn_result_written_d = '0;
 
@@ -185,6 +190,24 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
     vinsn_result_written_d[masku_result_id] |= masku_result_gnt;
     vinsn_result_written_d[ldu_result_id] |= ldu_result_gnt;
     vinsn_result_written_d[sldu_result_id] |= sldu_result_gnt;
+
+    for(int i=0; i<NrVInsn; ++i)
+      for(int j=0; j<NrHazardOperands; ++j)
+        for(int k=0; k<NrOperandQueues; ++k)
+          update_trans[i][j][k] = update[k][i][j];
+
+    update_write_o = 'b0;
+    update_read_o  = 'b0;
+    update_write_o[alu_result_id_i] |= alu_result_gnt_o;
+    update_write_o[mfpu_result_id_i] |= mfpu_result_gnt_o;
+    update_write_o[masku_result_id] |= masku_result_gnt;
+    update_write_o[ldu_result_id] |= ldu_result_gnt;
+    update_write_o[sldu_result_id] |= sldu_result_gnt;
+    for(int i=0; i<NrVInsn; ++i) begin
+      for(int j=0; j<NrHazardOperands; ++j) begin
+        update_read_o[i][j] |= |update_trans[i][j];
+      end
+    end
   end
 
   always_ff @(posedge clk_i or negedge rst_ni) begin: p_vinsn_result_written_ff
@@ -195,7 +218,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
     end
   end
 
-  ///////////////////////
+  //////////////////////
   //  Operand request  //
   ///////////////////////
 
@@ -238,25 +261,8 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
       // Element width
       vew_e vew;
 
-      // Hazards between vector instructions
-      logic [NrVInsn-1:0] hazard;
-
-      // Widening instructions produces two writes of every read
-      // In case of a WAW with a previous instruction,
-      // read once every two writes of the previous instruction
-      logic is_widening;
-      // One-bit counters
-      logic [NrVInsn-1:0] waw_hazard_counter;
-      // we stall hazard instruction when vstart != 0
-      logic non_zero_vstart;
+      hazard_operand_t hazard_operand;
     } requester_d, requester_q;
-
-
-    // Is there a hazard during this cycle?
-    logic stall;
-    assign stall = (|(requester_q.hazard & ~(vinsn_result_written_q &
-                   (~{NrVInsn{requester_q.is_widening}} | requester_q.waw_hazard_counter)))) ||
-                   (requester_q.non_zero_vstart && |requester_q.hazard);
 
     // Did we get a grant?
     logic [NrBanks-1:0] operand_requester_gnt;
@@ -271,6 +277,8 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
       // Maintain state
       state_d     = state_q;
       requester_d = requester_q;
+
+      update[requester] = 'b0;
 
       // Make no requests to the VRF
       operand_payload[requester] = '0;
@@ -329,13 +337,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
                               operand_request_i[requester].eew) :
                               operand_request_i[requester].vl,
               vew         : operand_request_i[requester].eew,
-              hazard      : operand_request_i[requester].hazard,
-              is_widening : operand_request_i[requester].cvt_resize == CVT_WIDE,
-              // TODO: Currently, we need to stall if vstart of instruction instead of this lane
-              // is not zero. Especially for MaskM queue, whose vstart can be zero even though
-              // instruction vstart is a big one, which causes that vd register is written from
-              // very high-order byte.
-              non_zero_vstart : operand_request_i[requester].non_zero_vstart,
+              hazard_operand  : operand_request_i[requester].hazard_operand,
               default: '0
             };
             // The length should be at least one after the rescaling
@@ -351,17 +353,12 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
         end
 
         REQUESTING: begin
-          // Update waw counters
-          for (int b = 0; b < NrVInsn; b++)
-            if (vinsn_result_written_d[b])
-              requester_d.waw_hazard_counter[b] = ~requester_q.waw_hazard_counter[b];
-
           if (operand_queue_ready_i[requester]) begin
             // Bank we are currently requesting
             automatic int bank = requester_q.addr[idx_width(NrBanks)-1:0];
 
             // Operand request
-            operand_req[bank][requester] = !stall;
+            operand_req[bank][requester] = insn_readable_i[requester_q.id][requester_q.hazard_operand];
             operand_payload[requester]   = '{
               addr   : requester_q.addr >> $clog2(NrBanks),
               opqueue: opqueue_e'(requester),
@@ -372,6 +369,8 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
             if (|operand_requester_gnt) begin
               // Bump the address pointer
               requester_d.addr = requester_q.addr + 1'b1;
+              // Notify reading progress to lane_sequencer.
+              update[requester][requester_q.id][requester_q.hazard_operand] = 1'b1;
 
               // We read less than 64 bits worth of elements
               if (requester_q.len < (1 << (int'(EW64) - int'(requester_q.vew))))
@@ -419,8 +418,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
                              operand_request_i[requester].eew) :
                              operand_request_i[requester].vl,
                   vew    : operand_request_i[requester].eew,
-                  hazard : operand_request_i[requester].hazard,
-                  non_zero_vstart : operand_request_i[requester].non_zero_vstart,
+                  hazard_operand  : operand_request_i[requester].hazard_operand,
                   default: '0
                 };
                 // The length should be at least one after the rescaling
@@ -431,8 +429,6 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
           end
         end
       endcase
-      // Always keep the hazard bits up to date with the global hazard table
-      requester_d.hazard &= global_hazard_table_i[requester_d.id];
     end : operand_requester
 
     always_ff @(posedge clk_i or negedge rst_ni) begin
@@ -500,15 +496,15 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
 
     // Store their request value
     operand_req[alu_result_addr_i[idx_width(NrBanks)-1:0]][NrOperandQueues + VFU_Alu] =
-    alu_result_req_i;
+    alu_result_req_i && insn_writable_i[alu_result_id_i];
     operand_req[mfpu_result_addr_i[idx_width(NrBanks)-1:0]][NrOperandQueues + VFU_MFpu] =
-    mfpu_result_req_i;
+    mfpu_result_req_i && insn_writable_i[mfpu_result_id_i];
     operand_req[masku_result_addr[idx_width(NrBanks)-1:0]][NrOperandQueues + VFU_MaskUnit] =
-    masku_result_req;
+    masku_result_req && insn_writable_i[masku_result_id];
     operand_req[sldu_result_addr[idx_width(NrBanks)-1:0]][NrOperandQueues + VFU_SlideUnit] =
-    sldu_result_req;
+    sldu_result_req && insn_writable_i[sldu_result_id];
     operand_req[ldu_result_addr[idx_width(NrBanks)-1:0]][NrOperandQueues + VFU_LoadUnit] =
-    ldu_result_req;
+    ldu_result_req && insn_writable_i[ldu_result_id];
 
     // Generate the grant signals
     alu_result_gnt_o  = 1'b0;

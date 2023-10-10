@@ -526,17 +526,6 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
 
                 // Return the new vl
                 acc_resp_o.result = vl_d;
-
-                // If the vtype has changed, wait for the backend before issuing any new instructions.
-                // This is to avoid hazards on implicit register labels when LMUL_old > LMUL_new
-                // and both the LMULs are greater then LMUL_1 (i.e., lmul[2] == 1'b0)
-                // Checking only lmul_q is a trick: we want to stall only if both lmuls have
-                // zero MSB. If lmul_q has zero MSB, it's greater than lmul_d only if also
-                // lmul_d has zero MSB since the slice comparison is intrinsically unsigned
-
-                // TODO: remove this stall after tests pass
-                if (vtype_d.vlmul[2:0] != vtype_q.vlmul[2:0])
-                  state_d = WAIT_IDLE;
               end
 
               OPIVV: begin: opivv

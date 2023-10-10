@@ -9,19 +9,26 @@
 // and with the main sequencer.
 
 module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width; #(
-    parameter int unsigned NrLanes = 0
+    parameter int unsigned NrLanes = 0,
+    parameter type vaddr_t         = logic
   ) (
     input  logic                                          clk_i,
     input  logic                                          rst_ni,
     // Lane ID
     input  logic                 [idx_width(NrLanes)-1:0] lane_id_i,
     // Interface with the main sequencer
+    input  logic [NrVInsn-1:0][NrVInsn-1:0][NrHazardOperands-1:0] global_hazard_table_i,
+    input  logic [NrVInsn-1:0][NrVInsn-1:0][NrHazardOperands-1:0] global_write_hazard_table_i,
     input  pe_req_t                                       pe_req_i,
     input  logic                                          pe_req_valid_i,
     input  logic                 [NrVInsn-1:0]            pe_vinsn_running_i,
     output logic                                          pe_req_ready_o,
     output pe_resp_t                                      pe_resp_o,
     // Interface with the operand requester
+    output logic [NrVInsn-1:0][NrHazardOperands-1:0]      insn_readable_o,
+    output logic [NrVInsn-1:0]                            insn_writable_o,
+    input  logic [NrVInsn-1:0][NrHazardOperands-1:0]      update_read_i,
+    input  logic [NrVInsn-1:0]                            update_write_i,
     output operand_request_cmd_t [NrOperandQueues-1:0]    operand_request_o,
     output logic                 [NrOperandQueues-1:0]    operand_request_valid_o,
     input  logic                 [NrOperandQueues-1:0]    operand_request_ready_i,
@@ -104,6 +111,39 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
       en_sync_mask_q <= en_sync_mask_d;
     end
   end
+
+  vaddr_t [NrVInsn-1:0][NrHazardOperands-1:0] insn_read_proceed_d, insn_read_proceed_q;
+  vaddr_t [NrVInsn-1:0] insn_write_proceed_d, insn_write_proceed_q;
+  logic [NrVInsn-1:0][NrHazardOperands-1:0] insn_readable;
+  logic [NrVInsn-1:0] insn_writable;
+
+  always_ff @(posedge clk_i or negedge rst_ni) begin : p_final_gnts
+    if (!rst_ni) begin
+      insn_read_proceed_q <= 'b0;
+      insn_write_proceed_q <= 'b0;
+    end else begin
+      for(int i=0; i<NrVInsn; ++i) begin
+        for(int j=0; j<NrHazardOperands; ++j) begin
+          insn_read_proceed_q[i][j] <= insn_read_proceed_d[i][j] + update_read_i[i][j];
+          insn_write_proceed_q[i] <= insn_write_proceed_d[i] + update_write_i[i];
+        end
+      end
+    end
+  end
+
+  rw_controller #(
+    .vaddr_t(vaddr_t)
+  ) i_rw_controller (
+    .insn_read_proceed_i(insn_read_proceed_q),
+    .insn_write_proceed_i(insn_write_proceed_q),
+    .global_read_hazard_table_i(global_hazard_table_i),
+    .global_write_hazard_table_i(global_write_hazard_table_i),
+    .readable_o(insn_readable),
+    .writable_o(insn_writable)
+  );
+
+  assign insn_readable_o     = insn_readable;
+  assign insn_writable_o     = insn_writable;
 
   //////////////////////////////////////
   //  Operand Request Command Queues  //
@@ -233,6 +273,23 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
       endcase
     end
 
+    insn_read_proceed_d  = insn_read_proceed_q;
+    insn_write_proceed_d = insn_write_proceed_q;
+    for (int queue = 0; queue < NrOperandQueues; queue++) begin
+      if(operand_request_valid_o[queue]) begin
+        insn_read_proceed_d[operand_request_o[queue].id][operand_request_o[queue].hazard_operand] =
+          vaddr(operand_request_o[queue].vs, NrLanes) + (operand_request_o[queue].vstart >> (int'(EW64) - int'(operand_request_o[queue].eew)));
+      end
+    end
+    // reset vd writing process when receiving a new instruction, we can't
+    // delay this update until `pe_req_valid` is asserted, since unmasked load
+    // instruction has no operand, it's possible that lane_sequencer will not
+    // accept it throughout the execution of load instruction.
+    // TODO: calculation for addr of vd is not correct for some instructions
+    // with non-zero vstart. e.g. VMSEQ
+    if(pe_req_valid_i_msk)
+      insn_write_proceed_d[pe_req_i.id] = vaddr(pe_req_i.vd, NrLanes) +
+        ((pe_req_i.vstart >> $clog2(NrLanes)) >> (int'(EW64) - int'(pe_req_i.vtype.vsew)));
     // We received a new vector instruction
     if (pe_req_valid && pe_req_ready && !vinsn_running_d[pe_req.id]) begin
       // Populate the VFU request
@@ -299,10 +356,9 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             // In case of reduction, AluA opqueue will keep the scalar element
             vl         : (pe_req.op inside {[VREDSUM:VWREDSUM]}) ? 1 : vfu_operation_d.vl,
             vstart     : vfu_operation_d.vstart,
-            hazard     : pe_req.hazard_vs1 | pe_req.hazard_vd,
             is_reduct  : pe_req.op inside {[VREDSUM:VWREDSUM]} ? 1'b1 : 0,
             target_fu  : ALU_SLDU,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VS1,
             default    : '0
           };
           operand_request_push[AluA] = pe_req.use_vs1;
@@ -321,10 +377,9 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             vl         : (pe_req.op inside {[VREDSUM:VWREDSUM]} && vfu_operation_d.vl == '0)
                          ? 1 : vfu_operation_d.vl,
             vstart     : vfu_operation_d.vstart,
-            hazard     : pe_req.hazard_vs2 | pe_req.hazard_vd,
             is_reduct  : pe_req.op inside {[VREDSUM:VWREDSUM]} ? 1'b1 : 0,
             target_fu  : ALU_SLDU,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VS2,
             default    : '0
           };
           operand_request_push[AluB] = pe_req.use_vs2;
@@ -339,8 +394,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             // extra operand regardless of whether it is valid in this lane or not.
             vl     : (pe_req.vl / NrLanes / 8) >> int'(pe_req.vtype.vsew),
             vstart : vfu_operation_d.vstart,
-            hazard : pe_req.hazard_vm | pe_req.hazard_vd,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VM,
             default: '0
           };
           if ((operand_request_i[MaskM].vl << int'(pe_req.vtype.vsew)) *
@@ -361,10 +415,9 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             // values in the opqueues. So, vl must be 1 at least
             vl         : (pe_req.op inside {[VFREDUSUM:VFWREDOSUM]}) ? 1 : vfu_operation_d.vl,
             vstart     : vfu_operation_d.vstart,
-            hazard     : pe_req.hazard_vs1 | pe_req.hazard_vd,
             is_reduct  : pe_req.op inside {[VFREDUSUM:VFWREDOSUM]} ? 1'b1 : 0,
             target_fu  : MFPU_ADDRGEN,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VS1,
             default    : '0
           };
           operand_request_push[MulFPUA] = pe_req.use_vs1;
@@ -383,11 +436,9 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             vl         : (pe_req.op inside {[VFREDUSUM:VFWREDOSUM]} && vfu_operation_d.vl == '0)
                         ? 1 : vfu_operation_d.vl,
             vstart     : vfu_operation_d.vstart,
-            hazard     : (pe_req.swap_vs2_vd_op ?
-            pe_req.hazard_vd : (pe_req.hazard_vs2 | pe_req.hazard_vd)),
             is_reduct  : pe_req.op inside {[VFREDUSUM:VFWREDOSUM]} ? 1'b1 : 0,
             target_fu  : MFPU_ADDRGEN,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  pe_req.swap_vs2_vd_op ? H_VD : H_VS2,
             default: '0
           };
           operand_request_push[MulFPUB] = pe_req.swap_vs2_vd_op ?
@@ -406,11 +457,9 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
                         ? 1 : vfu_operation_d.vl,
             vstart     : vfu_operation_d.vstart,
             vtype      : pe_req.vtype,
-            hazard     : pe_req.swap_vs2_vd_op ?
-            (pe_req.hazard_vs2 | pe_req.hazard_vd) : pe_req.hazard_vd,
             is_reduct  : pe_req.op inside {[VFREDUSUM:VFWREDOSUM]} ? 1'b1 : 0,
             target_fu  : MFPU_ADDRGEN,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  pe_req.swap_vs2_vd_op ? H_VS2 : H_VD,
             default : '0
           };
           operand_request_push[MulFPUC] = pe_req.swap_vs2_vd_op ?
@@ -426,8 +475,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             // extra operand regardless of whether it is valid in this lane or not.
             vl     : (pe_req.vl / NrLanes / 8) >> int'(pe_req.vtype.vsew),
             vstart : vfu_operation_d.vstart,
-            hazard : pe_req.hazard_vm | pe_req.hazard_vd,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VM,
             default: '0
           };
           if ((operand_request_i[MaskM].vl << int'(pe_req.vtype.vsew)) *
@@ -452,8 +500,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             // extra operand regardless of whether it is valid in this lane or not.
             vl     : ceil_mask_vl - floor_mask_vstart,
             vstart : floor_mask_vstart,
-            hazard : pe_req.hazard_vm | pe_req.hazard_vd,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VM,
             default: '0
           };
           operand_request_push[MaskM] = !pe_req.vm;
@@ -476,8 +523,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             scale_vl : pe_req.scale_vl,
             vstart   : floor_vstart,
             vtype    : pe_req.vtype,
-            hazard   : pe_req.hazard_vs2 | pe_req.hazard_vd,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VS2,
             default  : '0
           };
           operand_request_push[SlideAddrGenA] = pe_req.op == VLXE;
@@ -509,8 +555,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             vl      : ceil_sta_vl - floor_sta_vstart,
             // the same as vl
             vstart  : floor_sta_vstart,
-            hazard  : pe_req.hazard_vs1 | pe_req.hazard_vd,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VS1,
             default : '0
           };
           //if (operand_request_i[StA].vl * NrLanes != pe_req.vl) operand_request_i[StA].vl += 1;
@@ -531,8 +576,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             // extra operand regardless of whether it is valid in this lane or not.
             vl     : ceil_mask_vl - floor_mask_vstart,
             vstart : floor_mask_vstart,
-            hazard : pe_req.hazard_vm | pe_req.hazard_vd,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VM,
             default: '0
           };
           operand_request_push[MaskM] = !pe_req.vm;
@@ -553,8 +597,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             scale_vl : pe_req.scale_vl,
             vstart   : floor_idx_vstart,
             vtype    : pe_req.vtype,
-            hazard   : pe_req.hazard_vs2 | pe_req.hazard_vd,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VS2,
             default  : '0
           };
           operand_request_push[SlideAddrGenA] = pe_req.op == VSXE;
@@ -570,8 +613,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             scale_vl : pe_req.scale_vl,
             vtype    : pe_req.vtype,
             vstart   : vfu_operation_d.vstart,
-            hazard   : pe_req.hazard_vs2 | pe_req.hazard_vd,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VS2,
             default  : '0
           };
           operand_request_push[SlideAddrGenA] = pe_req.use_vs2;
@@ -584,6 +626,9 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
               // extra operand regardless of whether it is valid in this lane or not.
               operand_request_i[SlideAddrGenA].vl =
               (pe_req.vl - pe_req.stride + NrLanes - 1) / NrLanes;
+              if(pe_req.stride > pe_req.vstart)
+                insn_write_proceed_d[pe_req.id] = vaddr(pe_req.vd, NrLanes) +
+                  ((pe_req.stride >> $clog2(NrLanes)) >> (int'(EW64) - int'(pe_req.vtype.vsew)));
             end
             VSLIDEDOWN: begin
               // Extra elements to ask, because of the stride
@@ -629,8 +674,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             eew    : pe_req.vtype.vsew,
             vtype  : pe_req.vtype,
             vstart : vfu_operation_d.vstart,
-            hazard : pe_req.hazard_vm | pe_req.hazard_vd,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VM,
             default: '0
           };
           operand_request_push[MaskM] = !pe_req.vm;
@@ -673,8 +717,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             scale_vl: pe_req.scale_vl,
             vtype   : pe_req.vtype,
             vstart  : vfu_operation_d.vstart,
-            hazard  : pe_req.hazard_vs1 | pe_req.hazard_vd,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VS1,
             default : '0
           };
 
@@ -702,8 +745,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             scale_vl: pe_req.scale_vl,
             vtype   : pe_req.vtype,
             vstart  : vfu_operation_d.vstart,
-            hazard  : pe_req.hazard_vs2 | pe_req.hazard_vd,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VS2,
             default : '0
           };
           // This is an operation that runs normally on the ALU, and then gets *condensed* and
@@ -730,8 +772,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             scale_vl: pe_req.scale_vl,
             vtype   : pe_req.vtype,
             vstart  : vfu_operation_d.vstart,
-            hazard  : pe_req.hazard_vs1 | pe_req.hazard_vd,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VS1,
             default : '0
           };
 
@@ -747,8 +788,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             scale_vl: pe_req.scale_vl,
             vtype   : pe_req.vtype,
             vstart  : vfu_operation_d.vstart,
-            hazard  : pe_req.hazard_vs2 | pe_req.hazard_vd,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VS2,
             default : '0
           };
           // This is an operation that runs normally on the ALU, and then gets *condensed* and
@@ -766,8 +806,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             // extra operand regardless of whether it is valid in this lane or not.
             vl      : (pe_req.vl / NrLanes / ELEN) << (int'(EW64) - int'(pe_req.vtype.vsew)),
             vstart  : vfu_operation_d.vstart,
-            hazard  : pe_req.hazard_vd,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VD,
             default : '0
           };
           if (((pe_req.vl / NrLanes / ELEN) * NrLanes * ELEN) !=
@@ -783,8 +822,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             // extra operand regardless of whether it is valid in this lane or not.
             vl     : (pe_req.vl / NrLanes / ELEN),
             vstart : vfu_operation_d.vstart,
-            hazard : pe_req.hazard_vm,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VM,
             default: '0
           };
           if ((operand_request_i[MaskM].vl * NrLanes * ELEN) != pe_req.vl) begin
@@ -803,8 +841,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
             vtype      : pe_req.vtype,
             vl         : vfu_operation_d.vl,
             vstart     : vfu_operation_d.vstart,
-            hazard     : pe_req.hazard_vs2,
-            non_zero_vstart : pe_req.vstart != 0,
+            hazard_operand :  H_VS2,
             default    : '0
           };
           operand_request_push[MaskB] = 1'b1;

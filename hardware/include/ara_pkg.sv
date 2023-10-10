@@ -411,12 +411,6 @@ package ara_pkg;
     vlen_t vl;
     vlen_t vstart;
     rvv_pkg::vtype_t vtype;
-
-    // Hazards
-    logic [NrVInsn-1:0] hazard_vs1;
-    logic [NrVInsn-1:0] hazard_vs2;
-    logic [NrVInsn-1:0] hazard_vm;
-    logic [NrVInsn-1:0] hazard_vd;
   } pe_req_t;
 
   typedef struct packed {
@@ -987,6 +981,23 @@ package ara_pkg;
     MFPU_ADDRGEN = 1'b1
   } target_fu_e;
 
+  // We use hazard_operand_t to indicate hazard type between two instructions.
+  // H_VS1: RAW hazard between two instructions, vs1 of the second one
+  // use the result of the first one(recorded in `global_hazard_table`). Or
+  // WAR hazard with the second one overwriting vs1 operand of first one(recorded
+  // in `global_write_hazard_table`).
+  // H_VS2: the same as H_VS1, except replacing operand vs1 with vs2.
+  // H_VM: the same as H_VS1, except replacing operand vs1 with vm.
+  // H_VD: WAW hazard between two instructions, the second one will overwrite
+  // result of the first one.
+  typedef enum logic[1:0] {
+    H_VS1 = 2'b00,
+    H_VS2 = 2'b01,
+    H_VM  = 2'b10,
+    H_VD  = 2'b11
+  } hazard_operand_t;
+  localparam int unsigned NrHazardOperands = 4;
+
   // This is the interface between the lane's sequencer and the operand request stage, which
   // makes consecutive requests to the vector elements inside the VRF.
   typedef struct packed {
@@ -1011,9 +1022,7 @@ package ara_pkg;
     vlen_t vstart;
 
     // Hazards
-    logic [NrVInsn-1:0] hazard;
-    // we stall hazard instruction when vstart != 0
-    logic non_zero_vstart;
+    hazard_operand_t hazard_operand;
   } operand_request_cmd_t;
 
   typedef struct packed {
