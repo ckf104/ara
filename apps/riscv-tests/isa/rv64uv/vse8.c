@@ -329,7 +329,7 @@ void TEST_CASE17(void) {
   asm volatile("vle8.v v3, (%0)" ::"r"(&LONG_I8[0]));
   write_csr(vstart, vstart);
   asm volatile("vse8.v v3, (%0), v0.t" ::"r"(&ALIGNED_I8[0]));
-  LVVCMP_U8(17, GOLD_TMP_I8, ALIGNED_I8);
+  LVVCMP_U8(17, ALIGNED_I8, GOLD_TMP_I8);
 
   vstart = 174;
   INIT(vstart, 256);
@@ -339,9 +339,21 @@ void TEST_CASE17(void) {
   asm volatile("vle8.v v3, (%0)" ::"r"(&LONG_I8[0]));
   write_csr(vstart, vstart);
   asm volatile("vse8.v v3, (%0), v0.t" ::"r"(&ALIGNED_I8[0]));
-  LVVCMP_U8(18, GOLD_TMP_I8, ALIGNED_I8);
+  LVVCMP_U8(18, ALIGNED_I8, GOLD_TMP_I8);
 
 #undef INIT
+}
+
+// check hazard detection with implicit register dependency
+void TEST_CASE18(void) {
+  for(int i=0; i<256; ++i) GOLD_TMP_I8[i] = 0;
+  VSET(256, e64, m8);
+  // vle8 will block execution of vmv
+  asm volatile("vle8.v v0, (%0)" ::"r"(&LONG_I8[0]));
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(0));
+  // vse8 has an implicit RAW dependency on vmv
+  asm volatile("vse8.v v7, (%0)" ::"r"(&ALIGNED_I8[0]));
+  LVVCMP_U8(19, ALIGNED_I8, GOLD_TMP_I8);
 }
 
 int main(void) {
@@ -366,6 +378,7 @@ int main(void) {
   TEST_CASE15();
   TEST_CASE16();
   TEST_CASE17();
+  TEST_CASE18();
 
   EXIT_CHECK();
 }

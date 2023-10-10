@@ -404,7 +404,7 @@ void TEST_CASE20(void) {
   asm volatile("vle32.v v4, (%0)" ::"r"(&LONG_I32[0]));
   write_csr(vstart, vstart);
   asm volatile("vse32.v v4, (%0), v0.t" ::"r"(&ALIGNED_I32[0]));
-  LVVCMP_U32(20, GOLD_TMP_I32, ALIGNED_I32);
+  LVVCMP_U32(20, ALIGNED_I32, GOLD_TMP_I32);
 
   vstart = 221;
   INIT(vstart, 256);
@@ -414,7 +414,7 @@ void TEST_CASE20(void) {
   asm volatile("vle32.v v4, (%0)" ::"r"(&LONG_I32[0]));
   write_csr(vstart, vstart);
   asm volatile("vse32.v v4, (%0), v0.t" ::"r"(&ALIGNED_I32[0]));
-  LVVCMP_U32(21, GOLD_TMP_I32, ALIGNED_I32);
+  LVVCMP_U32(21, ALIGNED_I32, GOLD_TMP_I32);
 
 #undef INIT
 }

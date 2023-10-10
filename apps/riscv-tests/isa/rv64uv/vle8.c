@@ -283,6 +283,19 @@ void TEST_CASE17(void) {
 #undef INIT
 }
 
+// check hazard detection with implicit register dependency
+void TEST_CASE18(void) {
+  VSET(256, e64, m8);
+  // Use the first vle8 instruction to block execution of vmv.
+  // If we can't detect implicit register, the second vle8 will
+  // be executed before vmv.
+  asm volatile("vle8.v v0, (%0)" ::"r"(&LONG_I8[0]));
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(0));
+  // vle8 should be stalled because it takes no operand and has hazard
+  asm volatile("vle8.v v7, (%0)" ::"r"(&LONG_I8[0]));
+  LVCMP_U8(19, v7, LONG_I8);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
@@ -305,6 +318,7 @@ int main(void) {
   TEST_CASE15();
   TEST_CASE16();
   TEST_CASE17();
+  TEST_CASE18();
 
   EXIT_CHECK();
 }

@@ -354,7 +354,7 @@ void TEST_CASE19(void) {
   asm volatile("vle16.v v4, (%0)" ::"r"(&LONG_I16[0]));
   write_csr(vstart, vstart);
   asm volatile("vse16.v v4, (%0), v0.t" ::"r"(&ALIGNED_I16[0]));
-  LVVCMP_U16(19, GOLD_TMP_I16, ALIGNED_I16);
+  LVVCMP_U16(19, ALIGNED_I16, GOLD_TMP_I16);
 
   vstart = 187;
   INIT(vstart, 256);
@@ -364,7 +364,7 @@ void TEST_CASE19(void) {
   asm volatile("vle16.v v4, (%0)" ::"r"(&LONG_I16[0]));
   write_csr(vstart, vstart);
   asm volatile("vse16.v v4, (%0), v0.t" ::"r"(&ALIGNED_I16[0]));
-  LVVCMP_U16(20, GOLD_TMP_I16, ALIGNED_I16);
+  LVVCMP_U16(20, ALIGNED_I16, GOLD_TMP_I16);
 
 #undef INIT
 }

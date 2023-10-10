@@ -5,6 +5,7 @@
 // Author: Matteo Perotti <mperotti@iis.ee.ethz.ch>
 
 #include "vector_macros.h"
+#include "long_array.h"
 
 #define AXI_DWIDTH 128
 
@@ -38,6 +39,34 @@ static volatile uint32_t BUFFER_O32[16] __attribute__((aligned(AXI_DWIDTH))) = {
 static volatile uint64_t BUFFER_O64[16] __attribute__((aligned(AXI_DWIDTH))) = {
     INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT,
     INIT, INIT, INIT, INIT, INIT, INIT, INIT, INIT};
+
+static volatile uint8_t LONG_INDEX_I8[512]
+    __attribute__((aligned(AXI_DWIDTH))) = {0};
+static volatile uint8_t GOLD_TMP_I8[512]
+    __attribute__((aligned(AXI_DWIDTH))) = {0};
+static volatile uint8_t ALIGNED_I8[512]
+    __attribute__((aligned(AXI_DWIDTH))) = {0};
+
+static volatile uint16_t LONG_INDEX_I16[512]
+    __attribute__((aligned(AXI_DWIDTH))) = {0};
+static volatile uint16_t GOLD_TMP_I16[512]
+    __attribute__((aligned(AXI_DWIDTH))) = {0};
+static volatile uint16_t ALIGNED_I16[512]
+    __attribute__((aligned(AXI_DWIDTH))) = {0};
+
+static volatile uint32_t LONG_INDEX_I32[512]
+    __attribute__((aligned(AXI_DWIDTH))) = {0};
+static volatile uint32_t GOLD_TMP_I32[512]
+    __attribute__((aligned(AXI_DWIDTH))) = {0};
+static volatile uint32_t ALIGNED_I32[512]
+    __attribute__((aligned(AXI_DWIDTH))) = {0};
+
+static volatile uint64_t LONG_INDEX_I64[512]
+    __attribute__((aligned(AXI_DWIDTH))) = {0};
+static volatile uint64_t GOLD_TMP_I64[512]
+    __attribute__((aligned(AXI_DWIDTH))) = {0};
+static volatile uint64_t ALIGNED_I64[512]
+    __attribute__((aligned(AXI_DWIDTH))) = {0};
 
 // Naive test
 void TEST_CASE1(void) {
@@ -130,12 +159,84 @@ void TEST_CASE2(void) {
             0x8913984898951989);
 }
 
+// masked index load with different vstart value
+void TEST_CASE3(void) {
+  uint8_t mask8 = 0xAA;
+  uint16_t mask16 = ((uint16_t)mask8 << 8) | mask8;
+  uint32_t mask32 = ((uint32_t)mask16 << 16) | mask16;
+  uint64_t mask64 = ((uint64_t)mask32 << 32) | mask32;
+
+  for(int i = 0; i < 512; ++i)LONG_INDEX_I16[i] = i;
+  for(int i = 0; i < 512; ++i){
+    if(i < 9 || i % 2 == 0) GOLD_TMP_I8[i] = 0;
+    else GOLD_TMP_I8[i] = LONG_I8[i];
+    ALIGNED_I8[i] = 0;
+  }
+
+  VSET(512, e8, m2);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask8));
+  asm volatile("vle16.v v4, (%0)" ::"r"(&LONG_INDEX_I16[0]));
+  asm volatile("vle8.v  v2, (%0)" ::"r"(&LONG_I8[0]));
+  write_csr(vstart, 9);
+  asm volatile("vsuxei16.v v2, (%0), v4, v0.t" ::"r"(&ALIGNED_I8[0]));
+  LVVCMP_U8(9, ALIGNED_I8, GOLD_TMP_I8);
+
+  for(int i = 0; i < 512; ++i)LONG_INDEX_I32[i] = 4 * i;
+  for(int i = 0; i < 512; ++i){
+    ALIGNED_I16[i] = 0;
+    GOLD_TMP_I16[i] = 0;
+    if(i / 2 >= 207 && i % 4 == 2) GOLD_TMP_I16[i] = LONG_I16[i / 2];
+  }
+
+  VSET(256, e16, m2);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask16));
+  asm volatile("vle32.v v4, (%0)" ::"r"(&LONG_INDEX_I32[0]));
+  asm volatile("vle16.v v2, (%0)" ::"r"(&LONG_I16[0]));
+  write_csr(vstart, 207);
+  asm volatile("vsuxei32.v v2, (%0), v4, v0.t" ::"r"(&ALIGNED_I16[0]));
+  VSET(512, e8, m2);
+  LVVCMP_U16(10, ALIGNED_I16, GOLD_TMP_I16);
+
+  for(int i = 0; i < 512; ++i)LONG_INDEX_I64[i] = 8 * i;
+  for(int i = 0; i < 512; ++i){
+    ALIGNED_I32[i] = 0;
+    GOLD_TMP_I32[i] = 0;
+    if(i / 2 >= 70 && i % 4 == 2) GOLD_TMP_I32[i] = LONG_I32[i / 2];
+  }
+
+  VSET(256, e32, m4);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask32));
+  asm volatile("vle64.v v8, (%0)" ::"r"(&LONG_INDEX_I64[0]));
+  asm volatile("vle32.v v4, (%0)" ::"r"(&LONG_I32[0]));
+  write_csr(vstart, 70);
+  asm volatile("vsuxei64.v v4, (%0), v8, v0.t" ::"r"(&ALIGNED_I32[0]));
+  VSET(512, e8, m2);
+  LVVCMP_U32(11, ALIGNED_I32, GOLD_TMP_I32);
+
+  for(int i = 0; i < 512; ++i)LONG_INDEX_I8[i] = (uint8_t)((8 * i) % 256);
+  for(int i = 0; i < 512; ++i){
+    ALIGNED_I64[i] = 0;
+    if(i >= 32 || i % 2 == 0) GOLD_TMP_I64[i] = 0;
+    else GOLD_TMP_I64[i] = LONG_I64[224 + i];
+  }
+
+  VSET(256, e64, m8);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask64));
+  asm volatile("vle8.v v1, (%0)" ::"r"(&LONG_INDEX_I8[0]));
+  asm volatile("vle64.v v8, (%0)" ::"r"(&LONG_I64[0]));
+  write_csr(vstart, 135);
+  asm volatile("vsuxei8.v v8, (%0), v1, v0.t" ::"r"(&ALIGNED_I64[0]));
+  VSET(512, e8, m2);
+  LVVCMP_U64(12, ALIGNED_I64, GOLD_TMP_I64);
+}
+
 int main(void) {
   INIT_CHECK();
   enable_vec();
 
   TEST_CASE1();
   TEST_CASE2();
+  TEST_CASE3();
 
   EXIT_CHECK();
 }

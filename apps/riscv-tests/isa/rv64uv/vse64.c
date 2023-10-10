@@ -429,7 +429,7 @@ void TEST_CASE19(void) {
   asm volatile("vle64.v v8, (%0)" ::"r"(&LONG_I64[0]));
   write_csr(vstart, vstart);
   asm volatile("vse64.v v8, (%0), v0.t" ::"r"(&ALIGNED_I64[0]));
-  LVVCMP_U64(19, GOLD_TMP_I64, ALIGNED_I64);
+  LVVCMP_U64(19, ALIGNED_I64, GOLD_TMP_I64);
 
   vstart = 192;
   INIT(vstart, 256);
@@ -439,7 +439,7 @@ void TEST_CASE19(void) {
   asm volatile("vle64.v v8, (%0)" ::"r"(&LONG_I64[0]));
   write_csr(vstart, vstart);
   asm volatile("vse64.v v8, (%0), v0.t" ::"r"(&ALIGNED_I64[0]));
-  LVVCMP_U64(20, GOLD_TMP_I64, ALIGNED_I64);
+  LVVCMP_U64(20, ALIGNED_I64, GOLD_TMP_I64);
 
 #undef INIT
 }

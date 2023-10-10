@@ -293,7 +293,7 @@ void TEST_CASE19(void) {
 
   VSET(256, e16, m2);
   asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask));
-  asm volatile("vmv.v.x v3, %[A]" ::[A] "r"(0));
+  asm volatile("vmv.v.x v2, %[A]" ::[A] "r"(0));
   write_csr(vstart, vstart);
   asm volatile("vle16.v v2, (%0), v0.t" ::"r"(&LONG_I16[0]));
   LVCMP_U16(20, v2, GOLD_TMP_I16);
