@@ -320,6 +320,7 @@ void TEST_CASE20(void) {
 
 // implicit WAW dependency with different LMUL
 void TEST_CASE21(void) {
+#if VLEN==2048
   uint64_t vstart = 255;
   for(uint32_t i=0; i < 254; ++i){
     GOLD_TMP_I32[i] = 0;
@@ -336,6 +337,7 @@ void TEST_CASE21(void) {
   asm volatile("vle64.v v0, (%[A])" ::[A] "r"(&LONG_I64[0]));
   VSET(256, e32, m4);
   LVCMP_U32(22, v4, GOLD_TMP_I32);
+#endif
 }
 
 int main(void) {

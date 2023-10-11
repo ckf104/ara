@@ -6,7 +6,7 @@
 
 #define AXI_DWIDTH 128
 
-static volatile uint8_t GOLD_TMP_I8[512] __attribute__((aligned(AXI_DWIDTH))) = {};
+static volatile uint8_t GOLD_TMP_I8[VLEN / 8 > 512 ? VLEN / 8 : 512] __attribute__((aligned(AXI_DWIDTH))) = {};
 
 void mtvec_handler(void) {
   asm volatile("csrr t0, mcause"); // Read mcause
@@ -346,8 +346,9 @@ void TEST_CASE17(void) {
 
 // check hazard detection with implicit register dependency
 void TEST_CASE18(void) {
-  for(int i=0; i<256; ++i) GOLD_TMP_I8[i] = 0;
-  VSET(256, e64, m8);
+  uint64_t maxvl = VLEN / 8;
+  for(int i=0; i<maxvl; ++i) GOLD_TMP_I8[i] = 0;
+  VSET(maxvl, e64, m8);
   // vle8 will block execution of vmv
   asm volatile("vle8.v v0, (%0)" ::"r"(&LONG_I8[0]));
   asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(0));

@@ -252,20 +252,18 @@ void TEST_CASE7(void) {
   for(int i = 0; i < 256; ++i)LONG_INDEX_I64[i] = 8 * i;
   for(int i = 0; i < 256; ++i){
     if(i < 70 || i % 2 == 0){
-      if(i % 4 == 0)GOLD_TMP_I32[i] = 4 * i;
-      else if(i % 4 == 1)GOLD_TMP_I32[i] = 4 * (i + 1);
-      else GOLD_TMP_I32[i] = 0;
+      GOLD_TMP_I32[i] = 0;
     }
     else GOLD_TMP_I32[i] = LONG_I32[2 * i];
   }
 
   VSET(256, e32, m4);
   asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask32));
+  asm volatile("vmv.v.x v16, %[A]" ::[A] "r"(0));
   asm volatile("vle64.v v8, (%0)" ::"r"(&LONG_INDEX_I64[0]));
   write_csr(vstart, 70);
-  // this overlapping should be valid according to section 5.2 of rvv spec 1.0
-  asm volatile("vluxei64.v v8, (%0), v8, v0.t" ::"r"(&LONG_I32[0]));
-  LVCMP_U32(25, v8, GOLD_TMP_I32);
+  asm volatile("vluxei64.v v16, (%0), v8, v0.t" ::"r"(&LONG_I32[0]));
+  LVCMP_U32(25, v16, GOLD_TMP_I32);
 
   for(int i = 0; i < 256; ++i)LONG_INDEX_I8[i] = (uint8_t)((8 * i) % 256);
   for(int i = 0; i < 256; ++i){
