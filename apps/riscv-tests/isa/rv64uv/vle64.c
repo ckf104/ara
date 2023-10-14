@@ -292,34 +292,48 @@ void TEST_CASE18(void) {
 
 // masked load with different vstart value, assume vlen >= 2048
 void TEST_CASE19(void) {
-  uint64_t mask = 0xAAAAAAAAAAAAAAAA;
+  uint64_t mask1 = 0xAAAAAAAAAAAAAAAA;
+  uint64_t mask2 = 0x3333333333333333;
   uint64_t vstart = 38;
-#define INIT(vstart, vl) \
-  for(uint32_t i=0; i < vl; ++i){ \
-    if(i < vstart) GOLD_TMP_I64[i] = 0; \
-    else GOLD_TMP_I64[i] = (i % 2 == 1) ? LONG_I64[i] : 0; \
+
+  for(uint32_t i=0; i < 40; ++i){
+    if(i < vstart) GOLD_TMP_I64[i] = 0;
+    else GOLD_TMP_I64[i] = (i % 2 == 1) ? LONG_I64[i] : 0;
   }
 
-  INIT(vstart, 40);
-
   VSET(40, e64, m8);
-  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask));
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask1));
   asm volatile("vmv.v.x v8, %[A]" ::[A] "r"(0));
   write_csr(vstart, vstart);
   asm volatile("vle64.v v8, (%0), v0.t" ::"r"(&LONG_I64[0]));
   LVCMP_U64(19, v8, GOLD_TMP_I64);
 
-  vstart = 77;
-  INIT(vstart, 256);
+  vstart = 139;
+  for(uint32_t i=0; i < 256; ++i){
+    if(i < vstart) GOLD_TMP_I64[i] = 0;
+    else GOLD_TMP_I64[i] = ((i % 4) < 2) ? LONG_I64[i] : 0;
+  }
 
   VSET(256, e64, m8);
-  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask));
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(mask2));
   asm volatile("vmv.v.x v8, %[A]" ::[A] "r"(0));
   write_csr(vstart, vstart);
   asm volatile("vle64.v v8, (%0), v0.t" ::"r"(&LONG_I64[0]));
   LVCMP_U64(20, v8, GOLD_TMP_I64);
 
 #undef INIT
+}
+
+void TEST_CASE20(void) {
+  VSET(16, e64, m1);
+  VLOAD_64(v4, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16);
+  VLOAD_8(v0, 0x33, 0x33);
+  write_csr(vstart, 2);
+  asm volatile("vle64.v v4, (%0), v0.t" ::"r"(&ALIGNED_I64[0]));
+  VSET(16, e64, m1);
+  VCMP_U64(21, v4, 1, 2, 3, 4, 0x9fa831c7a11a9384, 0x3819759853987548,
+           7, 8, 0x1874754791888188, 0x3eeeeeeee33111ae, 11,
+           12, 0x9031850931584902, 0x3189759837598759, 15, 16);
 }
 
 int main(void) {
@@ -346,6 +360,8 @@ int main(void) {
   TEST_CASE17();
   TEST_CASE18();
   TEST_CASE19();
+
+  TEST_CASE20();
 
   EXIT_CHECK();
 }
