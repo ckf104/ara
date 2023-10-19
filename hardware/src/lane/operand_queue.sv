@@ -28,6 +28,7 @@ module operand_queue import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   ) (
     input  logic                              clk_i,
     input  logic                              rst_ni,
+    input  logic                              flush_i,
     // Lane ID
     input  logic [idx_width(NrLanes)-1:0]     lane_id_i,
     // Interface with the Operand Requester
@@ -59,7 +60,7 @@ module operand_queue import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     .clk_i     (clk_i                    ),
     .rst_ni    (rst_ni                   ),
     .testmode_i(1'b0                     ),
-    .flush_i   (1'b0                     ),
+    .flush_i   (flush_i                  ),
     .data_i    (operand_queue_cmd_i      ),
     .push_i    (operand_queue_cmd_valid_i),
     .full_o    (/* Unused */             ),
@@ -86,7 +87,7 @@ module operand_queue import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     .clk_i     (clk_i          ),
     .rst_ni    (rst_ni         ),
     .testmode_i(1'b0           ),
-    .flush_i   (1'b0           ),
+    .flush_i   (flush_i        ),
     .data_i    (operand_i      ),
     .push_i    (operand_valid_i),
     .full_o    (/* Unused */   ),
@@ -109,6 +110,7 @@ module operand_queue import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     if (operand_issued_i) ibuf_usage_d += 1;
     // Consumed an operand
     if (ibuf_pop) ibuf_usage_d -= 1;
+    if (flush_i) ibuf_usage_d = 'b0;
 
     // Are we ready?
     operand_queue_ready_o = (ibuf_usage_q != DataBufDepth);
@@ -457,8 +459,8 @@ module operand_queue import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
       select_q <= '0;
       vl_q     <= '0;
     end else begin
-      select_q <= select_d;
-      vl_q     <= vl_d;
+      select_q <= flush_i ? 'b0 : select_d;
+      vl_q     <= flush_i ? 'b0 : vl_d;
     end
   end : p_type_conversion_ff
 

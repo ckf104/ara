@@ -13,6 +13,7 @@ module operand_queues_stage import ara_pkg::*; import rvv_pkg::*; import cf_math
   ) (
     input  logic                                     clk_i,
     input  logic                                     rst_ni,
+    input  logic                                     flush_i,
     input  logic            [idx_width(NrLanes)-1:0] lane_id_i,
     // Interface with the Vector Register File
     input  elen_t              [NrOperandQueues-1:0] operand_i,
@@ -64,6 +65,7 @@ module operand_queues_stage import ara_pkg::*; import rvv_pkg::*; import cf_math
   ) i_operand_queue_alu_a (
     .clk_i                    (clk_i                          ),
     .rst_ni                   (rst_ni                         ),
+    .flush_i                  (flush_i                        ),
     .lane_id_i                (lane_id_i                      ),
     .operand_queue_cmd_i      (operand_queue_cmd_i[AluA]      ),
     .operand_queue_cmd_valid_i(operand_queue_cmd_valid_i[AluA]),
@@ -90,6 +92,7 @@ module operand_queues_stage import ara_pkg::*; import rvv_pkg::*; import cf_math
   ) i_operand_queue_alu_b (
     .clk_i                    (clk_i                          ),
     .rst_ni                   (rst_ni                         ),
+    .flush_i                  (flush_i                        ),
     .lane_id_i                (lane_id_i                      ),
     .operand_queue_cmd_i      (operand_queue_cmd_i[AluB]      ),
     .operand_queue_cmd_valid_i(operand_queue_cmd_valid_i[AluB]),
@@ -118,6 +121,7 @@ module operand_queues_stage import ara_pkg::*; import rvv_pkg::*; import cf_math
   ) i_operand_queue_mfpu_a (
     .clk_i                    (clk_i                             ),
     .rst_ni                   (rst_ni                            ),
+    .flush_i                  (flush_i                           ),
     .lane_id_i                (lane_id_i                         ),
     .operand_queue_cmd_i      (operand_queue_cmd_i[MulFPUA]      ),
     .operand_queue_cmd_valid_i(operand_queue_cmd_valid_i[MulFPUA]),
@@ -142,6 +146,7 @@ module operand_queues_stage import ara_pkg::*; import rvv_pkg::*; import cf_math
   ) i_operand_queue_mfpu_b (
     .clk_i                    (clk_i                             ),
     .rst_ni                   (rst_ni                            ),
+    .flush_i                  (flush_i                           ),
     .lane_id_i                (lane_id_i                         ),
     .operand_queue_cmd_i      (operand_queue_cmd_i[MulFPUB]      ),
     .operand_queue_cmd_valid_i(operand_queue_cmd_valid_i[MulFPUB]),
@@ -166,6 +171,7 @@ module operand_queues_stage import ara_pkg::*; import rvv_pkg::*; import cf_math
   ) i_operand_queue_mfpu_c (
     .clk_i                    (clk_i                             ),
     .rst_ni                   (rst_ni                            ),
+    .flush_i                  (flush_i                           ),
     .lane_id_i                (lane_id_i                         ),
     .operand_queue_cmd_i      (operand_queue_cmd_i[MulFPUC]      ),
     .operand_queue_cmd_valid_i(operand_queue_cmd_valid_i[MulFPUC]),
@@ -191,6 +197,7 @@ module operand_queues_stage import ara_pkg::*; import rvv_pkg::*; import cf_math
   ) i_operand_queue_st_mask_a (
     .clk_i                    (clk_i                         ),
     .rst_ni                   (rst_ni                        ),
+    .flush_i                  (flush_i                       ),
     .lane_id_i                (lane_id_i                     ),
     .operand_queue_cmd_i      (operand_queue_cmd_i[StA]      ),
     .operand_queue_cmd_valid_i(operand_queue_cmd_valid_i[StA]),
@@ -216,6 +223,7 @@ module operand_queues_stage import ara_pkg::*; import rvv_pkg::*; import cf_math
   ) i_operand_queue_slide_addrgen_a (
     .clk_i                    (clk_i                                         ),
     .rst_ni                   (rst_ni                                        ),
+    .flush_i                  (flush_i                                       ),
     .lane_id_i                (lane_id_i                                     ),
     .operand_queue_cmd_i      (operand_queue_cmd_i[SlideAddrGenA]            ),
     .operand_queue_cmd_valid_i(operand_queue_cmd_valid_i[SlideAddrGenA]      ),
@@ -244,6 +252,7 @@ module operand_queues_stage import ara_pkg::*; import rvv_pkg::*; import cf_math
   ) i_operand_queue_mask_b (
     .clk_i                    (clk_i                           ),
     .rst_ni                   (rst_ni                          ),
+    .flush_i                  (flush_i                         ),
     .lane_id_i                (lane_id_i                       ),
     .operand_queue_cmd_i      (operand_queue_cmd_i[MaskB]      ),
     .operand_queue_cmd_valid_i(operand_queue_cmd_valid_i[MaskB]),
@@ -264,6 +273,7 @@ module operand_queues_stage import ara_pkg::*; import rvv_pkg::*; import cf_math
   ) i_operand_queue_mask_m (
     .clk_i                    (clk_i                           ),
     .rst_ni                   (rst_ni                          ),
+    .flush_i                  (flush_i                         ),
     .lane_id_i                (lane_id_i                       ),
     .operand_queue_cmd_i      (operand_queue_cmd_i[MaskM]      ),
     .operand_queue_cmd_valid_i(operand_queue_cmd_valid_i[MaskM]),

@@ -23,10 +23,12 @@ module vlsu import ara_pkg::*; import rvv_pkg::*; #(
     parameter  type          axi_resp_t   = logic,
     // Dependant parameters. DO NOT CHANGE!
     localparam int  unsigned DataWidth    = $bits(elen_t),
-    localparam type          strb_t       = logic [DataWidth/8-1:0]
+    localparam type          strb_t       = logic [DataWidth/8-1:0],
+    localparam type          axi_addr_t   = logic [AxiAddrWidth-1:0]
   ) (
     input  logic                    clk_i,
     input  logic                    rst_ni,
+    input  logic                    flush_i,
     // AXI Memory Interface
     output axi_req_t                axi_req_o,
     input  axi_resp_t               axi_resp_i,
@@ -42,8 +44,9 @@ module vlsu import ara_pkg::*; import rvv_pkg::*; #(
     output logic      [1:0]         pe_req_ready_o,         // Load (0) and Store (1) units
     output pe_resp_t  [1:0]         pe_resp_o,              // Load (0) and Store (1) units
     output logic                    addrgen_ack_o,
-    output logic                    addrgen_error_o,
+    output logic      [3:0]         addrgen_error_o,
     output vlen_t                   addrgen_error_vl_o,
+    output axi_addr_t               addrgen_error_vaddr_o,
     // Interface with the lanes
     // Store unit operands
     input  elen_t     [NrLanes-1:0] stu_operand_i,
@@ -76,12 +79,6 @@ module vlsu import ara_pkg::*; import rvv_pkg::*; #(
     input logic [riscv::PLEN-1:0]         ara_paddr_i,
     input ariane_pkg::exception_t         ara_exception_i
   );
-
-  ///////////////////
-  //  Definitions  //
-  ///////////////////
-
-  typedef logic [AxiAddrWidth-1:0] axi_addr_t;
 
   ///////////////
   //  AXI Cut  //
@@ -117,6 +114,13 @@ module vlsu import ara_pkg::*; import rvv_pkg::*; #(
   logic             axi_addrgen_req_valid;
   logic             ldu_axi_addrgen_req_ready;
   logic             stu_axi_addrgen_req_ready;
+  vid_t             addrgen_error_vid;
+  logic             addrgen_error_is_load;
+  logic [3:0]       addrgen_error;
+  vlen_t            addrgen_error_vl;
+
+  assign addrgen_error_o    = addrgen_error;
+  assign addrgen_error_vl_o = addrgen_error_vl;
 
   addrgen #(
     .NrLanes     (NrLanes     ),
@@ -127,6 +131,7 @@ module vlsu import ara_pkg::*; import rvv_pkg::*; #(
   ) i_addrgen (
     .clk_i                      (clk_i                      ),
     .rst_ni                     (rst_ni                     ),
+    .flush_i                    (flush_i                    ),
     // AXI Memory Interface
     .axi_aw_o                   (axi_req.aw                 ),
     .axi_aw_valid_o             (axi_req.aw_valid           ),
@@ -141,8 +146,9 @@ module vlsu import ara_pkg::*; import rvv_pkg::*; #(
     .pe_req_valid_i             (pe_req_valid_i             ),
     .pe_vinsn_running_i         (pe_vinsn_running_i         ),
     .addrgen_ack_o              (addrgen_ack_o              ),
-    .addrgen_error_o            (addrgen_error_o            ),
-    .addrgen_error_vl_o         (addrgen_error_vl_o         ),
+    .addrgen_error_o            (addrgen_error              ),
+    .addrgen_error_vl_o         (addrgen_error_vl           ),
+    .addrgen_error_vaddr_o      (addrgen_error_vaddr_o      ),
     // Interface with the lanes
     .addrgen_operand_i          (addrgen_operand_i          ),
     .addrgen_operand_target_fu_i(addrgen_operand_target_fu_i),
@@ -159,6 +165,8 @@ module vlsu import ara_pkg::*; import rvv_pkg::*; #(
     // Interface with the load/store units
     .axi_addrgen_req_o          (axi_addrgen_req            ),
     .axi_addrgen_req_valid_o    (axi_addrgen_req_valid      ),
+    .addrgen_error_vid_o        (addrgen_error_vid          ),
+    .addrgen_error_is_load_o    (addrgen_error_is_load      ),
     .ldu_axi_addrgen_req_ready_i(ldu_axi_addrgen_req_ready  ),
     .stu_axi_addrgen_req_ready_i(stu_axi_addrgen_req_ready  )
   );
@@ -191,6 +199,9 @@ module vlsu import ara_pkg::*; import rvv_pkg::*; #(
     // Interface with the address generator
     .axi_addrgen_req_i      (axi_addrgen_req           ),
     .axi_addrgen_req_valid_i(axi_addrgen_req_valid     ),
+    .error_i                (addrgen_error != 4'b0 && addrgen_error_is_load),
+    .error_vl_i             (addrgen_error_vl          ),
+    .error_vid_i            (addrgen_error_vid         ),
     .axi_addrgen_req_ready_o(ldu_axi_addrgen_req_ready ),
     // Interface with the Mask unit
     .mask_i                 (mask_i                    ),
@@ -220,6 +231,7 @@ module vlsu import ara_pkg::*; import rvv_pkg::*; #(
   ) i_vstu (
     .clk_i                  (clk_i                      ),
     .rst_ni                 (rst_ni                     ),
+    .flush_i                (flush_i                    ),
     // AXI Memory Interface
     .axi_w_o                (axi_req.w                  ),
     .axi_w_valid_o          (axi_req.w_valid            ),
@@ -239,6 +251,9 @@ module vlsu import ara_pkg::*; import rvv_pkg::*; #(
     // Interface with the address generator
     .axi_addrgen_req_i      (axi_addrgen_req            ),
     .axi_addrgen_req_valid_i(axi_addrgen_req_valid      ),
+    .error_i                (addrgen_error != 4'b0 && !addrgen_error_is_load),
+    .error_vl_i             (addrgen_error_vl           ),
+    .error_vid_i            (addrgen_error_vid          ),
     .axi_addrgen_req_ready_o(stu_axi_addrgen_req_ready  ),
     // Interface with the Mask unit
     .mask_i                 (mask_i                     ),

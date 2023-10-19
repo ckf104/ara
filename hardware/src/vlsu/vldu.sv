@@ -36,6 +36,9 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
     // Interface with the address generator
     input  addrgen_axi_req_t               axi_addrgen_req_i,
     input  logic                           axi_addrgen_req_valid_i,
+    input  logic                           error_i,
+    input  vlen_t                          error_vl_i,
+    input  vid_t                           error_vid_i,
     output logic                           axi_addrgen_req_ready_o,
     // Interface with the lanes
     output logic             [NrLanes-1:0] ldu_result_req_o,
@@ -192,6 +195,11 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
   // - A pointer to which byte in the full VRF word we are writing data into.
   logic [idx_width(DataWidth*NrLanes/8):0] vrf_pnt_d, vrf_pnt_q;
 
+  // error related signals
+  logic error_q, error_d, error_dealing;
+  vid_t error_vid_q, error_vid_d;
+  vlen_t error_vl_q, error_vl_d;
+
   always_comb begin: p_vldu
     // Maintain state
     vinsn_queue_d = vinsn_queue_q;
@@ -223,6 +231,36 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
     // Inform the main sequencer if we are idle
     pe_req_ready_o = !vinsn_queue_full;
 
+    error_d     = error_q | error_i;
+    error_vl_d  = error_i ? error_vl_i  : error_vl_q;
+    error_vid_d = error_i ? error_vid_i : error_vid_q;
+    error_dealing = '0;
+
+    // We don't bother generating proper `mask_ready_o` and `stu_operand_ready_o`
+    // signals when an error occurred. These operands will be flushed by flush signal
+    // generating from main sequencer.
+    if(vinsn_issue_valid && error_q && error_vid_q == vinsn_issue_q.id) begin
+      vlen_t error_skip_bytes = (vinsn_issue_q.vl - error_vl_q) << vinsn_issue_q.vtype.vsew;
+      error_d       = 'b0;
+      error_dealing = 'b1;
+      issue_cnt_d   = issue_cnt_q > error_skip_bytes ? issue_cnt_q - error_skip_bytes : 'b0;
+      commit_cnt_d  = commit_cnt_q > error_skip_bytes ? commit_cnt_q - error_skip_bytes : 'b0;
+      // We commit remaining bytes in the result queue if error happens and no
+      // further bytes available
+      if(issue_cnt_d == vrf_pnt_q && vrf_pnt_q > 'b0) begin
+        result_queue_cnt_d += 1;
+        if (result_queue_write_pnt_q == ResultQueueDepth-1)
+          result_queue_write_pnt_d = '0;
+        else
+          result_queue_write_pnt_d = result_queue_write_pnt_q + 1;
+
+        // Trigger the request signal
+        result_queue_valid_d[result_queue_write_pnt_q] = {NrLanes{1'b1}};
+        issue_cnt_d = 'b0;
+        vrf_pnt_d   = 'b0;
+      end
+    end
+
     ////////////////////////////////////
     //  Read data from the R channel  //
     ////////////////////////////////////
@@ -231,7 +269,7 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
     // - There is an R beat available.
     // - The Address Generator sent us the data about the corresponding AR beat
     // - There is place in the result queue to write the data read from the R channel
-    if (axi_r_valid_i && axi_addrgen_req_valid_i
+    if (axi_r_valid_i && axi_addrgen_req_valid_i && !error_dealing
         && axi_addrgen_req_i.is_load && !result_queue_full) begin
       // Bytes valid in the current R beat
       // If non-unit strided load, we do not progress within the beat
@@ -332,23 +370,22 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
         // Wait for another AXI request
         axi_addrgen_req_ready_o = 1'b1;
       end
+    end
+    // Finished issuing results
+    if (vinsn_issue_valid && issue_cnt_d == '0) begin
+      // Increment vector instruction queue pointers and counters
+      vinsn_queue_d.issue_cnt -= 1;
+      if (vinsn_queue_q.issue_pnt == VInsnQueueDepth-1)
+        vinsn_queue_d.issue_pnt = '0;
+      else
+        vinsn_queue_d.issue_pnt += 1;
 
-      // Finished issuing results
-      if (vinsn_issue_valid && issue_cnt_d == '0) begin
-        // Increment vector instruction queue pointers and counters
-        vinsn_queue_d.issue_cnt -= 1;
-        if (vinsn_queue_q.issue_pnt == VInsnQueueDepth-1)
-          vinsn_queue_d.issue_pnt = '0;
-        else
-          vinsn_queue_d.issue_pnt += 1;
-
-        // Prepare for the next vector instruction
-        if (vinsn_queue_d.issue_cnt != 0) begin
-          int unsigned skipped_bytes = vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vstart << int'(vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vtype.vsew);
-          issue_cnt_d = (vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vl << int'(vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vtype.vsew))
-             - ((skipped_bytes >> $clog2(8*NrLanes)) << $clog2(8*NrLanes));
-          vrf_pnt_d = skipped_bytes[$clog2(8*NrLanes)-1:0];
-        end
+      // Prepare for the next vector instruction
+      if (vinsn_queue_d.issue_cnt != 0) begin
+        int unsigned skipped_bytes = vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vstart << int'(vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vtype.vsew);
+        issue_cnt_d = (vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vl << int'(vinsn_queue_q.vinsn[vinsn_queue_d.issue_pnt].vtype.vsew))
+           - ((skipped_bytes >> $clog2(8*NrLanes)) << $clog2(8*NrLanes));
+        vrf_pnt_d = skipped_bytes[$clog2(8*NrLanes)-1:0];
       end
     end
 
@@ -379,7 +416,7 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
     // All lanes accepted the VRF request
     // Wait for all the final grants, to be sure that all the results were written back
     if (!(|result_queue_valid_d[result_queue_read_pnt_q]) &&
-      (&result_final_gnt_d || commit_cnt_q > (NrLanes * 8)))
+      (&result_final_gnt_d || commit_cnt_q > (NrLanes * 8)) && !error_dealing)
       // There is something waiting to be written
       if (!result_queue_empty) begin
         // Increment the read pointer
@@ -456,6 +493,9 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
       vrf_pnt_q          <= '0;
       pe_resp_o          <= '0;
       result_final_gnt_q <= '0;
+      error_q            <= '0;
+      error_vl_q         <= '0;
+      error_vid_q        <= '0;
     end else begin
       vinsn_running_q    <= vinsn_running_d;
       issue_cnt_q        <= issue_cnt_d;
@@ -465,6 +505,9 @@ module vldu import ara_pkg::*; import rvv_pkg::*; #(
       vrf_pnt_q          <= vrf_pnt_d;
       pe_resp_o          <= pe_resp;
       result_final_gnt_q <= result_final_gnt_d;
+      error_q            <= error_d;
+      error_vl_q         <= error_vl_d;
+      error_vid_q        <= error_vid_d;
     end
   end
 

@@ -323,7 +323,7 @@ package ara_pkg;
     elen_t resp;
 
     // Instruction triggered an error
-    logic error;
+    logic[3:0] error;
 
     // New value for vstart
     vlen_t error_vl;

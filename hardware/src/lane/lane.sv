@@ -30,6 +30,7 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
   ) (
     input  logic                                           clk_i,
     input  logic                                           rst_ni,
+    input  logic                                           flush_i,
     // Scan chain
     input  logic                                           scan_enable_i,
     input  logic                                           scan_data_i,
@@ -140,6 +141,7 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
   lane_sequencer #(.NrLanes(NrLanes), .vaddr_t(vaddr_t)) i_lane_sequencer (
     .clk_i                  (clk_i                ),
     .rst_ni                 (rst_ni               ),
+    .flush_i                (flush_i              ),
     .lane_id_i              (lane_id_i            ),
     // Interface with the main sequencer
     .pe_req_i               (pe_req_i             ),
@@ -209,6 +211,7 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
   ) i_operand_requester (
     .clk_i                    (clk_i                   ),
     .rst_ni                   (rst_ni                  ),
+    .flush_i                  (flush_i                 ),
     // Interface with the lane sequencer
     .insn_readable_i          (insn_readable           ),
     .insn_writable_i          (insn_writable           ),
@@ -322,6 +325,7 @@ module lane import ara_pkg::*; import rvv_pkg::*; #(
   ) i_operand_queues (
     .clk_i                            (clk_i                              ),
     .rst_ni                           (rst_ni                             ),
+    .flush_i                          (flush_i                            ),
     .lane_id_i                        (lane_id_i                          ),
     // Interface with the Vector Register File
     .operand_i                        (vrf_operand                        ),

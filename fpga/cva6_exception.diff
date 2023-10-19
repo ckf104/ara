@@ -1,0 +1,34 @@
+diff --git a/core/acc_dispatcher.sv b/core/acc_dispatcher.sv
+index e0054a43..88eb37da 100644
+--- a/core/acc_dispatcher.sv
++++ b/core/acc_dispatcher.sv
+@@ -258,9 +258,9 @@ module acc_dispatcher import ariane_pkg::*; import riscv::*; (
+   assign acc_result_o    = acc_resp_i.result;
+   assign acc_valid_o     = acc_resp_i.resp_valid;
+   assign acc_exception_o = '{
+-      cause: riscv::ILLEGAL_INSTR,
+-      tval : '0,
+-      valid: acc_resp_i.error
++      cause: acc_resp_i.error,
++      tval : acc_resp_i.result,
++      valid: acc_resp_i.error != 'b0
+     };
+   // Always ready to receive responses
+   assign acc_req_o.resp_ready = 1'b1;
+diff --git a/core/include/acc_pkg.sv b/core/include/acc_pkg.sv
+index 08db307e..e1ebc06d 100644
+--- a/core/include/acc_pkg.sv
++++ b/core/include/acc_pkg.sv
+@@ -35,7 +35,11 @@ package acc_pkg;
+     logic                                 resp_valid;
+     riscv::xlen_t                         result;
+     logic [ariane_pkg::TRANS_ID_BITS-1:0] trans_id;
+-    logic                                 error;
++    // when error != 0, it indicates the type of exception:
++    // ILLEGAL_INSTR, LOAD_ADDR_MISALLIGNED, STORE_ADDR_MISALLIGNED,
++    // LOAD_PAGE_FAULT, STORE_PAGE_FAULT
++    // TODO: distinguish between illegal instr and misaligned access
++    logic [3:0]                           error;
+     // Metadata
+     logic                                 store_pending;
+     logic                                 store_complete;

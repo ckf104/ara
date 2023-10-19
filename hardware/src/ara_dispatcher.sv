@@ -480,7 +480,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                 end else if (insn.vsetvl_type.func7 == 7'b100_0000) begin // vsetvl
                   vtype_d = vtype_xlen(riscv::xlen_t'(acc_req_i.rs2[7:0]));
                 end else
-                  acc_resp_o.error = 1'b1;
+                  illegal_insn = 1'b1;
 
                 // Check whether the updated vtype makes sense
                 if ((vtype_d.vsew > rvv_pkg::vew_e'($clog2(ELENB))) || // SEW <= ELEN
@@ -2043,8 +2043,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                         end
                         default: begin
                           // Trigger an error
-                          acc_resp_o.error = 1'b1;
-                          ara_req_valid_d  = 1'b0;
+                          illegal_insn = 1'b1;
                         end
                       endcase
                     end
@@ -2561,10 +2560,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   end
               end
               default: begin // Invalid. Element is too wide, or encoding is non-existant.
-                acc_resp_o.req_ready  = 1'b1;
-                acc_resp_o.error = 1'b1;
-                acc_resp_o.resp_valid = 1'b1;
-                ara_req_valid_d  = 1'b0;
+                illegal_insn = 1'b1;
               end
             endcase
 
@@ -2702,8 +2698,10 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
               acc_resp_o.resp_valid = 1'b1;
               ara_req_valid_d  = 1'b0;
               // In case of error, modify vstart, or clear vstart if valid
-              if (ara_resp_i.error)
+              if (ara_resp_i.error != 'b0) begin
+                acc_resp_o.result = ara_resp_i.resp;
                 vstart_d = ara_resp_i.error_vl;
+              end
               else
                 vstart_d = 'b0;
             end
@@ -2780,10 +2778,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   end
               end
               default: begin // Invalid. Element is too wide, or encoding is non-existant.
-                acc_resp_o.req_ready  = 1'b1;
-                acc_resp_o.error = 1'b1;
-                acc_resp_o.resp_valid = 1'b1;
-                ara_req_valid_d  = 1'b0;
+                illegal_insn = 1'b1;
               end
             endcase
 
@@ -2899,6 +2894,8 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                 end
                 default: begin
                   // Trigger an error for the reserved simm values
+                  // TODO: This illegal assignment will be overwrite by
+                  // latter one unconditionally.
                   illegal_insn     = 1'b1;
                 end
               endcase
@@ -2916,8 +2913,10 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
               acc_resp_o.resp_valid = 1'b1;
               ara_req_valid_d  = 1'b0;
               // If there is an error, change vstart, or clear vstart if valid
-              if (ara_resp_i.error)
+              if (ara_resp_i.error != 'b0) begin
+                acc_resp_o.result = ara_resp_i.resp;
                 vstart_d = ara_resp_i.error_vl;
+              end
               else
                 vstart_d = 'b0;
             end
@@ -2949,7 +2948,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     vxsat_d           = vxsat_e'(acc_req_i.rs1[0]);
                     acc_resp_o.result = vlen_t'(vxsat_q);
                   end
-                  default: acc_resp_o.error = 1'b1;
+                  default: illegal_insn = 1'b1;
                 endcase
               end
               3'b010: begin // csrrs
@@ -2962,17 +2961,17 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   riscv::CSR_VTYPE: begin
                     // Only reads are allowed
                     if (acc_req_i.insn.itype.rs1 == '0) acc_resp_o.result = xlen_vtype(vtype_q);
-                    else acc_resp_o.error                                 = 1'b1;
+                    else illegal_insn                                     = 1'b1;
                   end
                   riscv::CSR_VL: begin
                     // Only reads are allowed
                     if (acc_req_i.insn.itype.rs1 == '0) acc_resp_o.result = vl_q;
-                    else acc_resp_o.error                                 = 1'b1;
+                    else illegal_insn                                     = 1'b1;
                   end
                   riscv::CSR_VLENB: begin
                     // Only reads are allowed
                     if (acc_req_i.insn.itype.rs1 == '0) acc_resp_o.result = VLENB;
-                    else acc_resp_o.error                                 = 1'b1;
+                    else illegal_insn                                     = 1'b1;
                   end
                   riscv::CSR_VXRM: begin
                     vxrm_d            = vxrm_q | vxrm_t'(acc_req_i.rs1[1:0]);
@@ -2982,7 +2981,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     vxsat_d           = vxsat_q | vxsat_e'(acc_req_i.rs1[0]);
                     acc_resp_o.result = vlen_t'(vxsat_q);
                   end
-                  default: acc_resp_o.error = 1'b1;
+                  default: illegal_insn = 1'b1;
                 endcase
               end
               3'b011: begin // csrrc
@@ -2995,23 +2994,23 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   riscv::CSR_VTYPE: begin
                     // Only reads are allowed
                     if (acc_req_i.insn.itype.rs1 == '0) acc_resp_o.result = xlen_vtype(vtype_q);
-                    else acc_resp_o.error                                 = 1'b1;
+                    else illegal_insn                                     = 1'b1;
                   end
                   riscv::CSR_VL: begin
                     // Only reads are allowed
                     if (acc_req_i.insn.itype.rs1 == '0) acc_resp_o.result = vl_q;
-                    else acc_resp_o.error                                 = 1'b1;
+                    else illegal_insn                                     = 1'b1;
                   end
                   riscv::CSR_VLENB: begin
                     // Only reads are allowed
                     if (acc_req_i.insn.itype.rs1 == '0) acc_resp_o.result = VLENB;
-                    else acc_resp_o.error                                 = 1'b1;
+                    else illegal_insn                                     = 1'b1;
                   end
                   riscv::CSR_VXSAT: begin
                     vxsat_d           = vxsat_q & ~vxsat_e'(acc_req_i.rs1[0]);
                     acc_resp_o.result = vxsat_q;
                   end
-                  default: acc_resp_o.error = 1'b1;
+                  default: illegal_insn = 1'b1;
                 endcase
               end
               3'b101: begin // csrrwi
@@ -3031,7 +3030,7 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                     vxsat_d           = acc_req_i.insn.itype.rs1[15];
                     acc_resp_o.result = vxsat_q;
                   end
-                  default: acc_resp_o.error = 1'b1;
+                  default: illegal_insn = 1'b1;
                 endcase
               end
               3'b110: begin // csrrsi
@@ -3044,24 +3043,24 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   riscv::CSR_VTYPE: begin
                     // Only reads are allowed
                     if (acc_req_i.insn.itype.rs1 == '0) acc_resp_o.result = xlen_vtype(vtype_q);
-                    else acc_resp_o.error                                 = 1'b1;
+                    else illegal_insn                                     = 1'b1;
                   end
                   riscv::CSR_VL: begin
                     // Only reads are allowed
                     if (acc_req_i.insn.itype.rs1 == '0) acc_resp_o.result = vl_q;
-                    else acc_resp_o.error                                 = 1'b1;
+                    else illegal_insn                                     = 1'b1;
                   end
                   riscv::CSR_VLENB: begin
                     // Only reads are allowed
                     if (acc_req_i.insn.itype.rs1 == '0) acc_resp_o.result = VLENB;
-                    else acc_resp_o.error                                 = 1'b1;
+                    else illegal_insn                                     = 1'b1;
                   end
                   riscv::CSR_VXSAT: begin
                     // logic [19:15] rs1; So, LSB is [15]
                     vxsat_d           = vxsat_q | vxsat_e'(acc_req_i.insn.itype.rs1[15]);
                     acc_resp_o.result = vxsat_q;
                   end
-                  default: acc_resp_o.error = 1'b1;
+                  default: illegal_insn = 1'b1;
                 endcase
               end
               3'b111: begin // csrrci
@@ -3074,38 +3073,36 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
                   riscv::CSR_VTYPE: begin
                     // Only reads are allowed
                     if (acc_req_i.insn.itype.rs1 == '0) acc_resp_o.result = xlen_vtype(vtype_q);
-                    else acc_resp_o.error                                 = 1'b1;
+                    else illegal_insn                                     = 1'b1;
                   end
                   riscv::CSR_VL: begin
                     // Only reads are allowed
                     if (acc_req_i.insn.itype.rs1 == '0) acc_resp_o.result = vl_q;
-                    else acc_resp_o.error                                 = 1'b1;
+                    else illegal_insn                                     = 1'b1;
                   end
                   riscv::CSR_VLENB: begin
                     // Only reads are allowed
                     if (acc_req_i.insn.itype.rs1 == '0) acc_resp_o.result = VLENB;
-                    else acc_resp_o.error                                 = 1'b1;
+                    else illegal_insn                                     = 1'b1;
                   end
                   riscv::CSR_VXSAT: begin
                     // logic [19:15] rs1; So, LSB is [15]
                     vxsat_d           = vxsat_q & ~vxsat_e'(acc_req_i.insn.itype.rs1[15]);
                     acc_resp_o.result = vxsat_q;
                   end
-                  default: acc_resp_o.error = 1'b1;
+                  default: illegal_insn = 1'b1;
                 endcase
               end
               default: begin
                 // Trigger an illegal instruction
-                acc_resp_o.error = 1'b1;
-                acc_resp_o.resp_valid = 1'b1;
+                illegal_insn = 1'b1;
               end
             endcase
           end
 
           default: begin
             // Trigger an illegal instruction
-            acc_resp_o.error = 1'b1;
-            acc_resp_o.resp_valid = 1'b1;
+            illegal_insn = 1'b1;
           end
         endcase
       end
@@ -3118,6 +3115,8 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
       // Check that we have we have vfrec7, vfrsqrt7
       if (ara_req_valid_d && (ara_req_d.op inside {VFREC7, VFRSQRT7}) && (FPExtSupport == FPExtSupportDisable))
         illegal_insn = 1'b1;
+      if(illegal_insn)
+        acc_resp_o.error = riscv::ILLEGAL_INSTR;
 
       // Check if we need to reshuffle our vector registers involved in the operation
       // This operation is costly when occurs, so avoid it if possible
@@ -3199,7 +3198,11 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
 
     // Raise an illegal instruction exception
     if (illegal_insn) begin
-      acc_resp_o.error = 1'b1;
+      acc_resp_o.error = riscv::ILLEGAL_INSTR;
+      // delay error report for one cycle if colliding with load/store completion signals
+      acc_resp_o.req_ready = ~((is_vload & load_complete_q) | (is_vstore & store_complete_q));
+      acc_resp_o.resp_valid = ~((is_vload & load_complete_q) | (is_vstore & store_complete_q));
+      acc_resp_o.result = acc_req_i.insn.instr;
       ara_req_valid_d  = 1'b0;
     end
 
@@ -3255,8 +3258,8 @@ module ara_dispatcher import ara_pkg::*; import rvv_pkg::*; #(
       store_zero_vl    = is_vstore;
     end
 
-    acc_resp_o.load_complete  = load_zero_vl  | load_complete_q;
-    acc_resp_o.store_complete = store_zero_vl | store_complete_q;
+    acc_resp_o.load_complete  = load_zero_vl  | load_complete_q  | (is_vload  && illegal_insn);
+    acc_resp_o.store_complete = store_zero_vl | store_complete_q | (is_vstore && illegal_insn);
 
     // The token must change at every new instruction
     ara_req_d.token = (ara_req_valid_o && ara_req_ready_i) ? ~ara_req_o.token : ara_req_o.token;

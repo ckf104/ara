@@ -10,13 +10,16 @@
 module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::idx_width; #(
     // RVV Parameters
     parameter  int unsigned NrLanes = 1,          // Number of parallel vector lanes
+    parameter  int  unsigned AxiAddrWidth = 0,    // Address width of the AXI interface
     // Dependant parameters. DO NOT CHANGE!
     // Ara has NrLanes + 3 processing elements: each one of the lanes, the vector load unit, the
     // vector store unit, the slide unit, and the mask unit.
-    localparam int unsigned NrPEs   = NrLanes + 4
+    localparam int unsigned NrPEs   = NrLanes + 4,
+    localparam type         axi_addr_t   = logic [AxiAddrWidth-1:0]
   ) (
     input  logic                            clk_i,
     input  logic                            rst_ni,
+    output logic                            flush_o,
     // Interface with Ara's dispatcher
     input  ara_req_t                        ara_req_i,
     input  logic                            ara_req_valid_i,
@@ -41,8 +44,9 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     output logic                            pe_scalar_resp_ready_o,
     // Interface with the Address Generation
     input  logic                            addrgen_ack_i,
-    input  logic                            addrgen_error_i,
-    input  vlen_t                           addrgen_error_vl_i
+    input  logic                      [3:0] addrgen_error_i,
+    input  vlen_t                           addrgen_error_vl_i,
+    input  axi_addr_t                       addrgen_error_vaddr_i,
   );
 
   ///////////////////////////////////
@@ -150,7 +154,9 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   /////////////////
 
   // If the instruction requires an answer to Ariane, the sequencer needs to wait.
-  enum logic { IDLE, WAIT } state_d, state_q;
+  // When memory operation raise an exception, we will enter flush state to flush
+  // excess operand
+  enum logic[1:0] { IDLE, WAIT, FLUSH} state_d, state_q;
 
   // For hazard detection, we need to know which vector instruction is reading/writing to each
   // vector register
@@ -275,6 +281,13 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
   // Update the token only upon new instructions
   assign ara_req_token_d = (ara_req_valid_i) ? ara_req_i.token : ara_req_token_q;
 
+  // error related signals
+  logic[3:0] error_q, error_d;
+  vlen_t error_vl_q, error_vl_d;
+  axi_addr_t error_vaddr_q, error_vaddr_d;
+  logic error_ld_st_done;
+  logic [1:0] flush_cnt_d, flush_cnt_q;
+
   always_comb begin: p_sequencer
     // Default assignments
     state_d               = state_q;
@@ -287,6 +300,12 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     active_vd = 'b0;
     active_vs1 = 'b0;
     active_vs2 = 'b0;
+
+    error_d       = error_q | addrgen_error_i;
+    error_vl_d    = addrgen_error_i != 4'b0 ? addrgen_error_vl_i    : error_vl_q;
+    error_vaddr_d = addrgen_error_i != 4'b0 ? addrgen_error_vaddr_i : error_vaddr_q;
+    flush_cnt_d   = flush_cnt_q;
+    flush_o       = 'b0;
 
     // Maintain request
     pe_req_d       = '0;
@@ -312,6 +331,9 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
 
     // Update the running vector instructions
     for (int pe = 0; pe < NrPEs; pe++) pe_vinsn_running_d[pe] &= ~pe_resp_i[pe].vinsn_done;
+
+    error_ld_st_done = pe_vinsn_running_d[NrLanes + OffsetLoad][pe_req_o.id] == 'b0 &&
+      pe_vinsn_running_d[NrLanes + OffsetStore][pe_req_o.id] == 'b0;
 
     case (state_q)
       IDLE: begin
@@ -485,13 +507,40 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
         if (pe_req_valid_o && &operand_requester_ready)
           pe_req_valid_d = 1'b0;
 
+        // There is a concern that function units capture the same instruction
+        // multiple times. The original solution is, counting pe_req buffer of
+        // each function unit, such that once pe_req_valid is asserted, these
+        // function unit will accept req in the next clock rising edge. And for
+        // lane sequencer, they have additional mask logic to ensure that the same
+        // instruction will be accepted only once. When sequencer wait `operand_requester_ready`
+        // (and assert `pe_req_valid` continuously), These function unit use `vinsn_running_q`
+        // to prevent from accepting repeatedly. When one instruction have been done,
+        // `vinsn_running_q` will be updated after two cycles(vinsn_running_d -> vinsn_running_o
+        // -> vinsn_running_q). Sequencer must deassert `pe_req_valid` or issue
+        // another `pe_req` within this time. In original case when no error occurs,
+        // this request is satisfied obviously.
+        // However, when memory operation ended early due to errors, sequencer may
+        // still assert `pe_req_valid`. e.g., a misaligned vector store ended without
+        // accepting any operand, at the same time, sequencer is waiting for the
+        // `operand_requester_ready`. So we need to deassert `pe_req_valid` when
+        // memory operation ended.
+        if((is_load(pe_req_d.op) || is_store(pe_req_d.op)) && error_ld_st_done)
+          pe_req_valid_d = 1'b0;
+
         // Wait for the address translation
-        if ((is_load(pe_req_d.op) || is_store(pe_req_d.op)) && addrgen_ack_i) begin
-          state_d             = IDLE;
-          ara_req_ready_o     = 1'b1;
-          ara_resp_valid_o    = 1'b1;
-          ara_resp_o.error    = addrgen_error_i;
-          ara_resp_o.error_vl = addrgen_error_vl_i;
+        if ((is_load(pe_req_d.op) || is_store(pe_req_d.op))) begin
+          if(addrgen_error_i == 4'b0 && addrgen_ack_i) begin
+            state_d             = IDLE;
+            ara_req_ready_o     = 1'b1;
+            ara_resp_valid_o    = 1'b1;
+            ara_resp_o.error    = addrgen_error_i;
+            ara_resp_o.error_vl = addrgen_error_vl_i;
+            // TODO: error vaddr will be cut into $bits(elen_t) when NrLanes > 2
+            ara_resp_o.resp     = addrgen_error_vaddr_i;
+          end else if(error_q != 4'b0 && (vinsn_running_d == 'b0 ||
+            (vinsn_running_d == (1 << pe_req_d.id) && error_ld_st_done))) begin
+            state_d = FLUSH;
+          end
         end
 
         // Wait for the scalar result
@@ -502,6 +551,30 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
           ara_resp_o.resp        = pe_scalar_resp_i;
           ara_resp_valid_o       = 1'b1;
           pe_scalar_resp_ready_o = pe_scalar_resp_valid_i & ~running_mask_insn_q;
+        end
+      end
+
+      FLUSH: begin
+        // When memory operation error occurs, we enter FLUSH state, and don't
+        // grant `ara_req` until flush operation overs.
+        ara_req_ready_o = 1'b0;
+        // What units we need to flush and how long we should assert `flush`?
+        // vlsu has dealt with error internally. Hence sequencer only to flush
+        // masku, lane_sequencer, operand_requester and operand_queue.
+        // TODO: stream_xbar in vector_regfile don't support flush operation, hence
+        // asserting `flush` for one cycle is not enough. we should flush for 2 cycles
+        // in the worst case. But for safety, we choose to assert `flush` for 4 cycles.
+        flush_o = 1'b1;
+        flush_cnt_d = flush_cnt_q + 1;
+        if(flush_cnt_q == 3) begin
+          state_d = IDLE;
+          ara_req_ready_o = 1'b1;
+          ara_resp_valid_o = 1'b1;
+          ara_resp_o.error = error_q;
+          ara_resp_o.error_vl = error_vl_q;
+          // TODO: error vaddr will be cut into $bits(elen_t) when NrLanes > 2
+          ara_resp_o.resp = error_vaddr_q;
+          error_d = 'b0;
         end
       end
     endcase
@@ -532,6 +605,11 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
       global_write_hazard_table_o <= '0;
 
       running_mask_insn_q <= 1'b0;
+
+      error_q       <= '0;
+      error_vl_q    <= '0;
+      error_vaddr_q <= '0;
+      flush_cnt_q   <= '0;
     end else begin
       state_q <= state_d;
 
@@ -548,6 +626,11 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
       global_write_hazard_table_o <= global_write_hazard_table_d;
 
       running_mask_insn_q <= running_mask_insn_d;
+
+      error_q       <= error_d;
+      error_vl_q    <= error_vl_d;
+      error_vaddr_q <= error_vaddr_d;
+      flush_cnt_q   <= flush_cnt_d;
     end
   end
 

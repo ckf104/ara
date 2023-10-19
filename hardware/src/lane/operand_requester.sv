@@ -17,6 +17,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
   ) (
     input  logic                                       clk_i,
     input  logic                                       rst_ni,
+    input  logic                                       flush_i,
     // Interface with the lane sequencer
     input  logic [NrVInsn-1:0][NrHazardOperands-1:0]   insn_readable_i,
     input  logic [NrVInsn-1:0]                         insn_writable_i,
@@ -101,7 +102,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
   stream_register #(.T(stream_register_payload_t)) i_ldu_stream_register (
     .clk_i     (clk_i                                                                    ),
     .rst_ni    (rst_ni                                                                   ),
-    .clr_i     (1'b0                                                                     ),
+    .clr_i     (flush_i                                                                  ),
     .testmode_i(1'b0                                                                     ),
     .data_i    ({ldu_result_id_i, ldu_result_addr_i, ldu_result_wdata_i, ldu_result_be_i}),
     .valid_i   (ldu_result_req_i                                                         ),
@@ -121,7 +122,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
   stream_register #(.T(stream_register_payload_t)) i_sldu_stream_register (
     .clk_i     (clk_i                                                                        ),
     .rst_ni    (rst_ni                                                                       ),
-    .clr_i     (1'b0                                                                         ),
+    .clr_i     (flush_i                                                                      ),
     .testmode_i(1'b0                                                                         ),
     .data_i    ({sldu_result_id_i, sldu_result_addr_i, sldu_result_wdata_i, sldu_result_be_i}),
     .valid_i   (sldu_result_req_i                                                            ),
@@ -141,7 +142,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
   stream_register #(.T(stream_register_payload_t)) i_masku_stream_register (
     .clk_i     (clk_i                                                                            ),
     .rst_ni    (rst_ni                                                                           ),
-    .clr_i     (1'b0                                                                             ),
+    .clr_i     (flush_i                                                                          ),
     .testmode_i(1'b0                                                                             ),
     .data_i    ({masku_result_id_i, masku_result_addr_i, masku_result_wdata_i, masku_result_be_i}),
     .valid_i   (masku_result_req_i                                                               ),
@@ -294,7 +295,7 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
       case (state_q)
         IDLE: begin
           // Accept a new instruction
-          if (operand_request_valid_i[requester]) begin
+          if (operand_request_valid_i[requester] && !flush_i) begin
             state_d                            = REQUESTING;
             // Acknowledge the request
             operand_request_ready_o[requester] = 1'b1;
@@ -353,7 +354,8 @@ module operand_requester import ara_pkg::*; import rvv_pkg::*; #(
         end
 
         REQUESTING: begin
-          if (operand_queue_ready_i[requester]) begin
+          if (flush_i) state_d = IDLE;
+          if (operand_queue_ready_i[requester] && !flush_i) begin
             // Bank we are currently requesting
             automatic int bank = requester_q.addr[idx_width(NrBanks)-1:0];
 

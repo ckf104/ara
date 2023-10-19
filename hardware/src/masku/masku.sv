@@ -19,6 +19,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
   ) (
     input  logic                                       clk_i,
     input  logic                                       rst_ni,
+    input  logic                                       flush_i,
     // Interface with the main sequencer
     input  pe_req_t                                    pe_req_i,
     input  logic                                       pe_req_valid_i,
@@ -131,7 +132,7 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
     if (!rst_ni) begin
       vinsn_queue_q <= '0;
     end else begin
-      vinsn_queue_q <= vinsn_queue_d;
+      vinsn_queue_q <= (flush_i) ? '0 : vinsn_queue_d;
     end
   end
 
@@ -171,11 +172,11 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
       mask_queue_read_pnt_q  <= '0;
       mask_queue_cnt_q       <= '0;
     end else begin
-      mask_queue_q           <= mask_queue_d;
-      mask_queue_valid_q     <= mask_queue_valid_d;
-      mask_queue_write_pnt_q <= mask_queue_write_pnt_d;
-      mask_queue_read_pnt_q  <= mask_queue_read_pnt_d;
-      mask_queue_cnt_q       <= mask_queue_cnt_d;
+      mask_queue_q           <= flush_i ? 'b0 : mask_queue_d;
+      mask_queue_valid_q     <= flush_i ? 'b0 : mask_queue_valid_d;
+      mask_queue_write_pnt_q <= flush_i ? 'b0 : mask_queue_write_pnt_d;
+      mask_queue_read_pnt_q  <= flush_i ? 'b0 : mask_queue_read_pnt_d;
+      mask_queue_cnt_q       <= flush_i ? 'b0 : mask_queue_cnt_d;
     end
   end
 
@@ -1062,6 +1063,9 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
       // Update the commit counters and pointers
       vinsn_queue_d.commit_cnt -= 1;
     end
+    // commit error instruction
+    if (flush_i && vinsn_commit_valid)
+      pe_resp.vinsn_done[vinsn_commit.id] = 1'b1;
 
     //////////////////////////////
     //  Accept new instruction  //
@@ -1148,11 +1152,11 @@ module masku import ara_pkg::*; import rvv_pkg::*; #(
       vfirst_count_q     <= '0;
     end else begin
       vinsn_running_q    <= vinsn_running_d;
-      read_cnt_q         <= read_cnt_d;
+      read_cnt_q         <= flush_i ? 'b0 : read_cnt_d;
       issue_cnt_q        <= issue_cnt_d;
-      commit_cnt_q       <= commit_cnt_d;
+      commit_cnt_q       <= flush_i ? 'b0 : commit_cnt_d;
       vrf_pnt_q          <= vrf_pnt_d;
-      mask_pnt_q         <= mask_pnt_d;
+      mask_pnt_q         <= flush_i ? 'b0 : mask_pnt_d;
       pe_resp_o          <= pe_resp;
       result_final_gnt_q <= result_final_gnt_d;
       popcount_q         <= popcount_d;

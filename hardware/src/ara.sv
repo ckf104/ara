@@ -61,6 +61,7 @@ module ara import ara_pkg::*; #(
   localparam int unsigned DataWidth = $bits(elen_t);
   localparam int unsigned StrbWidth = DataWidth / 8;
   typedef logic [StrbWidth-1:0] strb_t;
+  typedef logic [AxiAddrWidth-1:0] axi_addr_t;
 
   //////////////////
   //  Dispatcher  //
@@ -131,8 +132,9 @@ module ara import ara_pkg::*; #(
   pe_resp_t          [NrPEs-1:0]   pe_resp;
   // Interface with the address generator
   logic                            addrgen_ack;
-  logic                            addrgen_error;
+  logic              [3:0]         addrgen_error;
   vlen_t                           addrgen_error_vl;
+  axi_addr_t                       addrgen_error_vaddr;
   logic              [NrLanes-1:0] alu_vinsn_done;
   logic              [NrLanes-1:0] mfpu_vinsn_done;
   // Interface with the operand requesters
@@ -154,9 +156,15 @@ module ara import ara_pkg::*; #(
   elen_t     result_scalar;
   logic      result_scalar_valid;
 
-  ara_sequencer #(.NrLanes(NrLanes)) i_sequencer (
+  logic      flush;
+
+  ara_sequencer #(
+    .NrLanes(NrLanes),
+    .AxiAddrWidth(AxiAddrWidth)
+  ) i_sequencer (
     .clk_i                 (clk_i                    ),
     .rst_ni                (rst_ni                   ),
+    .flush_o               (flush                    ),
     // Interface with the dispatcher
     .ara_req_i             (ara_req                  ),
     .ara_req_valid_i       (ara_req_valid            ),
@@ -182,7 +190,8 @@ module ara import ara_pkg::*; #(
     // Interface with the address generator
     .addrgen_ack_i         (addrgen_ack              ),
     .addrgen_error_i       (addrgen_error            ),
-    .addrgen_error_vl_i    (addrgen_error_vl         )
+    .addrgen_error_vl_i    (addrgen_error_vl         ),
+    .addrgen_error_vaddr_i (addrgen_error_vaddr      )
   );
 
   // Scalar move support
@@ -245,6 +254,7 @@ module ara import ara_pkg::*; #(
     ) i_lane (
       .clk_i                           (clk_i                               ),
       .rst_ni                          (rst_ni                              ),
+      .flush_i                         (flush                               ),
       .scan_enable_i                   (scan_enable_i                       ),
       .scan_data_i                     (1'b0                                ),
       .scan_data_o                     (/* Unused */                        ),
@@ -341,6 +351,7 @@ module ara import ara_pkg::*; #(
   ) i_vlsu (
     .clk_i                      (clk_i                                                 ),
     .rst_ni                     (rst_ni                                                ),
+    .flush_i                    (flush                                                 ),
     // AXI memory interface
     .axi_req_o                  (axi_req_o                                             ),
     .axi_resp_i                 (axi_resp_i                                            ),
@@ -358,6 +369,7 @@ module ara import ara_pkg::*; #(
     .addrgen_ack_o              (addrgen_ack                                           ),
     .addrgen_error_o            (addrgen_error                                         ),
     .addrgen_error_vl_o         (addrgen_error_vl                                      ),
+    .addrgen_error_vaddr_o      (addrgen_error_vaddr                                   ),
     // Interface with the Mask unit
     .mask_i                     (mask                                                  ),
     .mask_valid_i               (mask_valid                                            ),
@@ -440,6 +452,7 @@ module ara import ara_pkg::*; #(
   ) i_masku (
     .clk_i                   (clk_i                           ),
     .rst_ni                  (rst_ni                          ),
+    .flush_i                 (flush                           ),
     // Interface with the main sequencer
     .pe_req_i                (pe_req                          ),
     .pe_req_valid_i          (pe_req_valid                    ),

@@ -28,6 +28,7 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
   )(
     input  logic                           clk_i,
     input  logic                           rst_ni,
+    input  logic                           flush_i,
     // Memory interface
     output axi_w_t                         axi_w_o,
     output logic                           axi_w_valid_o,
@@ -42,11 +43,15 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
     input  pe_req_t                        pe_req_i,
     input  logic                           pe_req_valid_i,
     input  logic             [NrVInsn-1:0] pe_vinsn_running_i,
+    // Flush excess stu_operand when store exception occurs
     output logic                           pe_req_ready_o,
     output pe_resp_t                       pe_resp_o,
     // Interface with the address generator
     input  addrgen_axi_req_t               axi_addrgen_req_i,
     input  logic                           axi_addrgen_req_valid_i,
+    input  logic                           error_i,
+    input  vlen_t                          error_vl_i,
+    input  vid_t                           error_vid_i,
     output logic                           axi_addrgen_req_ready_o,
     // Interface with the lanes
     input  elen_t            [NrLanes-1:0] stu_operand_i,
@@ -77,7 +82,7 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
     ) i_register (
       .clk_i     (clk_i                    ),
       .rst_ni    (rst_ni                   ),
-      .clr_i     (1'b0                     ),
+      .clr_i     (flush_i                  ),
       .testmode_i(1'b0                     ),
       .data_i    (stu_operand_i[lane]      ),
       .valid_i   (stu_operand_valid_i[lane]),
@@ -171,6 +176,15 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
   // - A pointer to which byte in the full VRF word we are reading data from.
   logic [idx_width(DataWidth*NrLanes/8):0] vrf_pnt_d, vrf_pnt_q;
 
+  // Count flight axi writes
+  // TODO: 8bit width is a casual choice
+  logic [7:0] flight_write_cnt_d, flight_write_cnt_q;
+
+  // error related signals
+  logic error_q, error_d, error_dealing;
+  vid_t error_vid_q, error_vid_d;
+  vlen_t error_vl_q, error_vl_d;
+
   always_comb begin: p_vstu
     // Maintain state
     vinsn_queue_d = vinsn_queue_q;
@@ -195,6 +209,41 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
     // Inform the main sequencer if we are idle
     pe_req_ready_o = !vinsn_queue_full;
 
+    flight_write_cnt_d = flight_write_cnt_q;
+    error_d     = error_q | error_i;
+    error_vl_d  = error_i ? error_vl_i  : error_vl_q;
+    error_vid_d = error_i ? error_vid_i : error_vid_q;
+    error_dealing = 'b0;
+
+    // We don't bother generating proper `mask_ready_o` and `stu_operand_ready_o`
+    // signals when an error occurred. These operands will be flushed by flush signal
+    // generating from main sequencer.
+    if(vinsn_issue_valid && error_q && error_vid_q == vinsn_issue_q.id) begin
+      vlen_t error_skip_bytes = (vinsn_issue_q.vl - error_vl_q) << vinsn_issue_q.vtype.vsew;
+      error_d = 'b0;
+      error_dealing = 'b1;
+      issue_cnt_d = issue_cnt_q > error_skip_bytes ? issue_cnt_q - error_skip_bytes : 'b0;
+      if(issue_cnt_d == vrf_pnt_q) begin
+        issue_cnt_d = 'b0;
+        vrf_pnt_d   = 'b0;
+      end
+      // Update commit_cnt if no further axi b channel response.
+      // issue_cnt will be updated by latter logic
+      if(issue_cnt_d == 'b0 && flight_write_cnt_q == 'b0) begin
+        // Signal complete store
+        store_complete_o = 1'b1;
+
+        pe_resp.vinsn_done[vinsn_commit.id] = 1'b1;
+
+        // Update the commit counters and pointers
+        vinsn_queue_d.commit_cnt -= 1;
+        if (vinsn_queue_d.commit_pnt == VInsnQueueDepth-1)
+          vinsn_queue_d.commit_pnt = '0;
+        else
+          vinsn_queue_d.commit_pnt += 1;
+      end
+    end
+
     /////////////////////////////////////
     //  Write data into the W channel  //
     /////////////////////////////////////
@@ -205,7 +254,7 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
     // - The address generator generated an AXI AW request for this write beat
     // - The AXI subsystem is ready to accept this W beat
     if (vinsn_issue_valid && &stu_operand_valid && (vinsn_issue_q.vm || (|mask_valid_i)) &&
-        axi_addrgen_req_valid_i && !axi_addrgen_req_i.is_load && axi_w_ready_i) begin
+        axi_addrgen_req_valid_i && !axi_addrgen_req_i.is_load && axi_w_ready_i && !error_dealing) begin
       // Bytes valid in the current W beat
       automatic shortint unsigned lower_byte = beat_lower_byte(axi_addrgen_req_i.addr,
         axi_addrgen_req_i.size, axi_addrgen_req_i.len, BURST_INCR, AxiDataWidth/8, len_q);
@@ -256,6 +305,7 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
       // We wrote all the beats for this AW burst
       if ($unsigned(len_d) == axi_pkg::len_t'($unsigned(axi_addrgen_req_i.len) + 1)) begin
         axi_w_o.last            = 1'b1;
+        flight_write_cnt_d      += 1;
         // Ask for another burst by the address generator
         axi_addrgen_req_ready_o = 1'b1;
         // Reset AXI pointers
@@ -303,6 +353,7 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
     if (axi_b_valid_i) begin
       // Acknowledge the B beat
       axi_b_ready_o = 1'b1;
+      flight_write_cnt_d -= 1;
 
       // Mark the vector instruction as being done
       if (vinsn_queue_d.issue_pnt != vinsn_queue_d.commit_pnt) begin
@@ -352,6 +403,10 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
       vrf_pnt_q <= '0;
 
       pe_resp_o <= '0;
+      flight_write_cnt_q <= '0;
+      error_q     <= '0;
+      error_vl_q  <= '0;
+      error_vid_q <= '0;
     end else begin
       vinsn_running_q <= vinsn_running_d;
       issue_cnt_q     <= issue_cnt_d;
@@ -360,6 +415,10 @@ module vstu import ara_pkg::*; import rvv_pkg::*; #(
       vrf_pnt_q <= vrf_pnt_d;
 
       pe_resp_o <= pe_resp;
+      flight_write_cnt_q <= flight_write_cnt_d;
+      error_q     <= error_d;
+      error_vl_q  <= error_vl_d;
+      error_vid_q <= error_vid_d;
     end
   end
 

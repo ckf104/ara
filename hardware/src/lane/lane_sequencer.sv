@@ -14,6 +14,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
   ) (
     input  logic                                          clk_i,
     input  logic                                          rst_ni,
+    input  logic                                          flush_i,
     // Lane ID
     input  logic                 [idx_width(NrLanes)-1:0] lane_id_i,
     // Interface with the main sequencer
@@ -67,7 +68,7 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
   ) i_pe_req_register (
     .clk_i     (clk_i             ),
     .rst_ni    (rst_ni            ),
-    .clr_i     (1'b0              ),
+    .clr_i     (flush_i           ),
     .testmode_i(1'b0              ),
     .data_i    (pe_req_i          ),
     .valid_i   (pe_req_valid_i_msk),
@@ -166,13 +167,13 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
       operand_request_valid_d[queue] = operand_request_valid_o[queue];
 
       // Clear the request
-      if (operand_request_ready_i[queue]) begin
+      if (operand_request_ready_i[queue] || flush_i) begin
         operand_request_d[queue]       = '0;
         operand_request_valid_d[queue] = 1'b0;
       end
 
       // Got a new request
-      if (operand_request_push[queue]) begin
+      if (operand_request_push[queue] && !flush_i) begin
         operand_request_d[queue]       = operand_request_i[queue];
         operand_request_valid_d[queue] = 1'b1;
       end
