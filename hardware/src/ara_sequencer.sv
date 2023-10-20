@@ -46,7 +46,7 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
     input  logic                            addrgen_ack_i,
     input  logic                      [3:0] addrgen_error_i,
     input  vlen_t                           addrgen_error_vl_i,
-    input  axi_addr_t                       addrgen_error_vaddr_i,
+    input  axi_addr_t                       addrgen_error_vaddr_i
   );
 
   ///////////////////////////////////

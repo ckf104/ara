@@ -501,20 +501,24 @@ module ara_soc import axi_pkg::*; import ara_pkg::*; #(
   ara_system
 `endif
   i_system (
-    .clk_i        (clk_i                    ),
-    .rst_ni       (rst_ni                   ),
-    .boot_addr_i  (DRAMBase                 ), // start fetching from DRAM
-    .hart_id_i    (hart_id                  ),
-    .scan_enable_i(1'b0                     ),
-    .scan_data_i  (1'b0                     ),
-    .scan_data_o  (/* Unconnected */        ),
+    .clk_i             (clk_i                    ),
+    .rst_ni            (rst_ni                   ),
+    .boot_addr_i       (DRAMBase                 ), // start fetching from DRAM
+    .hart_id_i         (hart_id                  ),
+    .ariane_irq_i      ('b0                      ),
+    .ariane_ipi_i      ('b0                      ),
+    .ariane_time_irq_i ('b0                      ),
+    .ariane_debug_req_i('b0                      ),
+    .scan_enable_i     (1'b0                     ),
+    .scan_data_i       (1'b0                     ),
+    .scan_data_o       (/* Unconnected */        ),
 `ifndef TARGET_GATESIM
-    .axi_req_o    (system_axi_req           ),
-    .axi_resp_i   (system_axi_resp          )
+    .axi_req_o         (system_axi_req           ),
+    .axi_resp_i        (system_axi_resp          )
   );
 `else
-    .axi_req_o    (system_axi_req_spill     ),
-    .axi_resp_i   (system_axi_resp_spill_del)
+    .axi_req_o         (system_axi_req_spill     ),
+    .axi_resp_i        (system_axi_resp_spill_del)
   );
 `endif
 
