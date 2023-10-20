@@ -68,6 +68,106 @@ static volatile uint64_t GOLD_TMP_I64[512]
 static volatile uint64_t ALIGNED_I64[512]
     __attribute__((aligned(AXI_DWIDTH))) = {0};
 
+// Init page table and enable MMU.
+// Assume that memory size is 8MB, start from 0x80000000 and SV39 configuration.
+// The first 4MB is mapped by 2MB size page. Latter memory used
+// for page table entries.
+// For memory range 0x80000000 - 0x80400000, they use the second entry of top page and
+// 0 - 1 entries of the secondary page.
+// In addition, we assume that uart base addr is 0xC0000000.
+// Using a 1G mapping for uart, which should cover ctrl device
+// located in 0xD0000000;
+void rvtest_init(void) {
+  uint64_t satp_addr            = 0x80000000UL + 0x400000UL;
+  uint64_t secondary_table_addr = 0x80000000UL + 0x500000UL;
+  uint64_t uart_base_addr       = 0xC0000000UL;
+  uint64_t U_bit = 1 << 4;  // user level access
+  uint64_t V_bit = 1 << 0;  // valid page entry
+  // cva6 request software to manage A/D bit. If not set, page fault will be
+  // raised when loading/storing.
+  uint64_t A_bit = 1 << 6;
+  uint64_t D_bit = 1 << 7;
+  uint64_t RWX_bit = (1 << 1) | (1 << 2) | (1 << 3); // R, W, X bit
+  uint64_t* top_page = (uint64_t*)satp_addr;
+  uint64_t* secondary_page = (uint64_t*)secondary_table_addr;
+
+  for(int i=0; i<512; ++i) top_page[i] = 0;
+  // Only the second entry in top page is valid
+  top_page[2] = U_bit | V_bit | ((secondary_table_addr >> 12) << 10);
+  // the third entry used for IO device
+  top_page[3] = U_bit | V_bit | ((uart_base_addr >> 12) << 10) | RWX_bit | A_bit | D_bit;
+
+  for(int i=0; i<512; ++i) secondary_page[i] = 0;
+  // First 2 entries in secondary page are valid
+  secondary_page[0] = U_bit | V_bit | ((0x80000000UL >> 12) << 10) | RWX_bit | A_bit | D_bit;
+  secondary_page[1] = U_bit | V_bit | ((0x80200000UL >> 12) << 10) | RWX_bit | A_bit | D_bit;
+
+  uint64_t satp_value = (8UL << 60) | (satp_addr >> 12);
+  asm volatile("csrw satp, %0" ::"r"(satp_value));
+  asm volatile("sfence.vma");
+}
+
+// Exception Handler for rtl
+
+void mtvec_handler(void) {
+  asm volatile("csrr t3, mcause"); // Read mcause
+  asm volatile("csrr t4, mtval");  // Read mtval
+
+  // Read mepc
+  asm volatile("csrr t1, mepc");
+
+  // Increment return address by 4
+  asm volatile("addi t1, t1, 4");
+  asm volatile("csrw mepc, t1");
+
+  // Filter with mcause and handle here
+
+  asm volatile("mret");
+}
+
+void TEST_CASE0(void) {
+  uint8_t mcause;
+  uint64_t mtval, vstart;
+  for(int i=0; i<256; ++i) GOLD_TMP_I16[i] = 0;
+  VSET(16, e16, m1);
+  // misaligned index
+  VLOAD_32(v4, 0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40,
+          44, 48, 52, 3, 0x800000);
+  asm volatile("vle16.v v0, (%0)" ::"r"(LONG_I16));
+  write_csr(vstart, 3);
+  asm volatile("vsuxei32.v v0, (%0), v4" ::"r"(GOLD_TMP_I16));
+  asm volatile("addi %[A], t3, 0" : [A] "=r"(mcause));
+  asm volatile("addi %[A], t4, 0" : [A] "=r"(mtval));
+  vstart = read_csr(vstart);
+  write_csr(vstart, 0);
+  XCMP(0, mcause, 6);
+  XCMP(0, mtval, ((uint64_t)GOLD_TMP_I16 + 3));
+  XCMP(0, vstart, 14);
+  VSET(32, e16, m1);
+  VVCMP_U16(0, GOLD_TMP_I16, 0, 0, 0, 0, 0, 0, LONG_I16[3],
+          0, LONG_I16[4], 0, LONG_I16[5], 0, LONG_I16[6], 0, LONG_I16[7], 0,
+          LONG_I16[8], 0, LONG_I16[9], 0, LONG_I16[10], 0, LONG_I16[11], 0,
+          LONG_I16[12], 0, LONG_I16[13], 0, 0, 0, 0, 0);
+
+  for(int i=0; i<256; ++i) GOLD_TMP_I32[i] = 0;
+  VSET(16, e32, m1);
+  VLOAD_64(v4, 0, 4, 8, 12, 16, 20, 24, 28, 32, 36, 40,
+          44, 48, 52, 56, 0x800000);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(0x33333333));
+  asm volatile("vle32.v v2, (%0)" ::"r"(LONG_I32));
+  asm volatile("vsuxei64.v v2, (%0), v4, v0.t" ::"r"(GOLD_TMP_I32));
+  asm volatile("addi %[A], t3, 0" : [A] "=r"(mcause));
+  asm volatile("addi %[A], t4, 0" : [A] "=r"(mtval));
+  vstart = read_csr(vstart);
+  write_csr(vstart, 0);
+  XCMP(0, mcause, 15);
+  XCMP(0, mtval, ((uint64_t)GOLD_TMP_I32 + 0x800000));
+  XCMP(0, vstart, 15);
+  VSET(16, e32, m1);
+  VVCMP_U32(0, GOLD_TMP_I32, LONG_I32[0], LONG_I32[1], 0, 0, LONG_I32[4], LONG_I32[5],
+          0, 0, LONG_I32[8], LONG_I32[9], 0, 0, LONG_I32[12], LONG_I32[13], 0, 0);
+}
+
 // Naive test
 void TEST_CASE1(void) {
   VSET(12, e8, m1);
@@ -233,6 +333,8 @@ void TEST_CASE3(void) {
 int main(void) {
   INIT_CHECK();
   enable_vec();
+
+  TEST_CASE0();
 
   TEST_CASE1();
   TEST_CASE2();

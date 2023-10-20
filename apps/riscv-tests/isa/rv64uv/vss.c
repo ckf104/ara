@@ -6,6 +6,96 @@
 
 #include "vector_macros.h"
 
+// Init page table and enable MMU.
+// Assume that memory size is 8MB, start from 0x80000000 and SV39 configuration.
+// The first 4MB is mapped by 2MB size page. Latter memory used
+// for page table entries.
+// For memory range 0x80000000 - 0x80400000, they use the second entry of top page and
+// 0 - 1 entries of the secondary page.
+// In addition, we assume that uart base addr is 0xC0000000.
+// Using a 1G mapping for uart, which should cover ctrl device
+// located in 0xD0000000;
+void rvtest_init(void) {
+  uint64_t satp_addr            = 0x80000000UL + 0x400000UL;
+  uint64_t secondary_table_addr = 0x80000000UL + 0x500000UL;
+  uint64_t uart_base_addr       = 0xC0000000UL;
+  uint64_t U_bit = 1 << 4;  // user level access
+  uint64_t V_bit = 1 << 0;  // valid page entry
+  // cva6 request software to manage A/D bit. If not set, page fault will be
+  // raised when loading/storing.
+  uint64_t A_bit = 1 << 6;
+  uint64_t D_bit = 1 << 7;
+  uint64_t RWX_bit = (1 << 1) | (1 << 2) | (1 << 3); // R, W, X bit
+  uint64_t* top_page = (uint64_t*)satp_addr;
+  uint64_t* secondary_page = (uint64_t*)secondary_table_addr;
+
+  for(int i=0; i<512; ++i) top_page[i] = 0;
+  // Only the second entry in top page is valid
+  top_page[2] = U_bit | V_bit | ((secondary_table_addr >> 12) << 10);
+  // the third entry used for IO device
+  top_page[3] = U_bit | V_bit | ((uart_base_addr >> 12) << 10) | RWX_bit | A_bit | D_bit;
+
+  for(int i=0; i<512; ++i) secondary_page[i] = 0;
+  // First 2 entries in secondary page are valid
+  secondary_page[0] = U_bit | V_bit | ((0x80000000UL >> 12) << 10) | RWX_bit | A_bit | D_bit;
+  secondary_page[1] = U_bit | V_bit | ((0x80200000UL >> 12) << 10) | RWX_bit | A_bit | D_bit;
+
+  uint64_t satp_value = (8UL << 60) | (satp_addr >> 12);
+  asm volatile("csrw satp, %0" ::"r"(satp_value));
+  asm volatile("sfence.vma");
+}
+
+// Exception Handler for rtl
+
+void mtvec_handler(void) {
+  asm volatile("csrr t3, mcause"); // Read mcause
+  asm volatile("csrr t4, mtval");  // Read mtval
+
+  // Read mepc
+  asm volatile("csrr t1, mepc");
+
+  // Increment return address by 4
+  asm volatile("addi t1, t1, 4");
+  asm volatile("csrw mepc, t1");
+
+  // Filter with mcause and handle here
+
+  asm volatile("mret");
+}
+
+void TEST_CASE0(void) {
+  uint8_t mcause;
+  uint64_t mtval, vstart;
+  VSET(16, e16, m1);
+  // misaligned stride
+  uint64_t stride = 3;
+  volatile uint16_t INP1[] = {0x9fe4, 0x1920, 0x8f2e, 0x05e0,
+                              0xf9aa, 0x71f0, 0xc394, 0xbbd3};
+  asm volatile("vsse16.v v1, (%0), %1" ::"r"(INP1), "r"(stride));
+  asm volatile("addi %[A], t3, 0" : [A] "=r"(mcause));
+  asm volatile("addi %[A], t4, 0" : [A] "=r"(mtval));
+  vstart = read_csr(vstart);
+  write_csr(vstart, 0);
+  XCMP(0, mcause, 6);
+  // TODO: maybe it should be the real misaligned addr?
+  XCMP(0, mtval, ((uint64_t)INP1));
+  XCMP(0, vstart, 0);
+
+  stride = 0x400000;
+  VSET(16, e8, m1);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(0x33));
+  asm volatile("vmv.v.x v1, %[A]" ::[A] "r"(0x33));
+  asm volatile("vsse8.v v1, (%0), %1, v0.t" ::"r"(INP1), "r"(stride));
+  asm volatile("addi %[A], t3, 0" : [A] "=r"(mcause));
+  asm volatile("addi %[A], t4, 0" : [A] "=r"(mtval));
+  vstart = read_csr(vstart);
+  write_csr(vstart, 0);
+  XCMP(0, mcause, 15);
+  XCMP(0, mtval, ((uint64_t)INP1 + stride));
+  XCMP(0, vstart, 1);
+  XCMP(0, (uint8_t)(INP1[0]), 0x33);
+}
+
 // Positive-stride tests
 void TEST_CASE1(void) {
   VSET(4, e8, m1);
@@ -211,6 +301,8 @@ void TEST_CASE7(void) {
 int main(void) {
   INIT_CHECK();
   enable_vec();
+
+  TEST_CASE0();
 
   TEST_CASE1();
   TEST_CASE2();

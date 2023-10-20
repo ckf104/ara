@@ -51,7 +51,7 @@ module ctrl_registers #(
   localparam logic [NumRegs-1:0][DataWidth-1:0] RegRstVal = '{
     0,
     0,
-    DRAMBaseAddr + DRAMLength,
+    DRAMBaseAddr + (DRAMLength >> 1),  // higher half for page table entries
     DRAMBaseAddr,
     0
   };

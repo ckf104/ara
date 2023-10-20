@@ -9,11 +9,50 @@
 
 static volatile uint16_t GOLD_TMP_I16[512] __attribute__((aligned(AXI_DWIDTH))) = {};
 
+// Init page table and enable MMU.
+// Assume that memory size is 8MB, start from 0x80000000 and SV39 configuration.
+// The first 4MB is mapped by 2MB size page. Latter memory used
+// for page table entries.
+// For memory range 0x80000000 - 0x80400000, they use the second entry of top page and
+// 0 - 1 entries of the secondary page.
+// In addition, we assume that uart base addr is 0xC0000000.
+// Using a 1G mapping for uart, which should cover ctrl device
+// located in 0xD0000000;
+void rvtest_init(void) {
+  uint64_t satp_addr            = 0x80000000UL + 0x400000UL;
+  uint64_t secondary_table_addr = 0x80000000UL + 0x500000UL;
+  uint64_t uart_base_addr       = 0xC0000000UL;
+  uint64_t U_bit = 1 << 4;  // user level access
+  uint64_t V_bit = 1 << 0;  // valid page entry
+  // cva6 request software to manage A/D bit. If not set, page fault will be
+  // raised when loading/storing.
+  uint64_t A_bit = 1 << 6;
+  uint64_t D_bit = 1 << 7;
+  uint64_t RWX_bit = (1 << 1) | (1 << 2) | (1 << 3); // R, W, X bit
+  uint64_t* top_page = (uint64_t*)satp_addr;
+  uint64_t* secondary_page = (uint64_t*)secondary_table_addr;
+
+  for(int i=0; i<512; ++i) top_page[i] = 0;
+  // Only the second entry in top page is valid
+  top_page[2] = U_bit | V_bit | ((secondary_table_addr >> 12) << 10);
+  // the third entry used for IO device
+  top_page[3] = U_bit | V_bit | ((uart_base_addr >> 12) << 10) | RWX_bit | A_bit | D_bit;
+
+  for(int i=0; i<512; ++i) secondary_page[i] = 0;
+  // First 2 entries in secondary page are valid
+  secondary_page[0] = U_bit | V_bit | ((0x80000000UL >> 12) << 10) | RWX_bit | A_bit | D_bit;
+  secondary_page[1] = U_bit | V_bit | ((0x80200000UL >> 12) << 10) | RWX_bit | A_bit | D_bit;
+
+  uint64_t satp_value = (8UL << 60) | (satp_addr >> 12);
+  asm volatile("csrw satp, %0" ::"r"(satp_value));
+  asm volatile("sfence.vma");
+}
+
 // Exception Handler for rtl
 
 void mtvec_handler(void) {
-  asm volatile("csrr t0, mcause"); // Read mcause
-
+  asm volatile("csrr t3, mcause"); // Read mcause
+  asm volatile("csrr t4, mtval");  // Read mtval
   // Read mepc
   asm volatile("csrr t1, mepc");
 
@@ -96,10 +135,30 @@ void TEST_CASE1(void) {
 // instruction exception and set mcause = 2
 void TEST_CASE2(void) {
   uint8_t mcause;
+  uint64_t mtval, vstart;
+  uint64_t load_addr;
   VSET(15, e32, m4);
   asm volatile("vle16.v v1, (%0)" ::"r"(&ALIGNED_I16[1]));
   asm volatile("addi %[A], t3, 0" : [A] "=r"(mcause));
   XCMP(2, mcause, 2);
+
+  load_addr = 0x803fffe0;
+  VSET(256, e16, m4);
+  asm volatile("vmv.v.x v0, %[A]" ::[A] "r"(0x3333));
+  write_csr(vstart, 4);
+  asm volatile("vle16.v v0, (%0)" ::"r"(load_addr));
+  asm volatile("addi %[A], t3, 0" : [A] "=r"(mcause));
+  asm volatile("addi %[A], t4, 0" : [A] "=r"(mtval));
+  vstart = read_csr(vstart);
+  write_csr(vstart, 0);
+
+  XCMP(2, mcause, 13);
+  XCMP(2, mtval, 0x80400000);
+  XCMP(2, vstart, 16);
+  VSET(16, e16, m1);
+  uint16_t* p = (uint16_t*)load_addr;
+  VCMP_U16(2, v0, 0x3333, 0x3333, 0x3333, 0x3333, p[4], p[5], p[6], p[7],
+          p[8], p[9], p[10], p[11], p[12], p[13], p[14], p[15]);
 }
 
 //*******Checking functionality of vle16 with different values of masking
@@ -307,7 +366,7 @@ int main(void) {
 
   printf("*****Running tests for vle16.v*****\n");
   TEST_CASE1();
-  // TEST_CASE2();
+  TEST_CASE2();
   TEST_CASE3();
   TEST_CASE4();
   TEST_CASE5();
