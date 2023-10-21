@@ -842,7 +842,7 @@ module addrgen import ara_pkg::*; import rvv_pkg::*; #(
               // Account for the requested operands
               axi_addrgen_d.len = axi_addrgen_q.len - 1;
               // Check if the address does generate an exception
-              if (is_addr_error(ara_paddr_q, eff_axi_dw_log_q)) begin
+              if (is_addr_error(ara_paddr_q, vew_e'(eff_axi_dw_log_q))) begin
                 // Generate an error
                 addrgen_error_d2        = axi_addrgen_q.is_load ? riscv::LD_ADDR_MISALIGNED :
                   riscv::ST_ADDR_MISALIGNED;

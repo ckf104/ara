@@ -358,7 +358,7 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
             // RAW
             if (ara_req_i.use_vs1) begin
               for(int i=0; i < 8; ++i) begin : cal_vs1_hazard
-                rvv_pkg::vlmul_e lmul_vs1 = ara_req_i.emul - ara_req_i.vtype.vsew + ara_req_i.eew_vs1;
+                rvv_pkg::vlmul_e lmul_vs1 = vlmul_e'(ara_req_i.emul - ara_req_i.vtype.vsew + ara_req_i.eew_vs1);
                 active_vs1[i] = i == 0 || (!lmul_vs1[2] && (1 << lmul_vs1) > i);
                 for(int vec_id = 0; vec_id < NrVInsn; ++vec_id) begin
                   global_hazard_table_d[vinsn_id_n][vec_id][H_VS1] |=
@@ -368,7 +368,7 @@ module ara_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::i
             end
             if (ara_req_i.use_vs2) begin
               for(int i=0; i < 8; ++i) begin : cal_vs2_hazard
-                rvv_pkg::vlmul_e lmul_vs2 = ara_req_i.emul - ara_req_i.vtype.vsew + ara_req_i.eew_vs2;
+                rvv_pkg::vlmul_e lmul_vs2 = vlmul_e'(ara_req_i.emul - ara_req_i.vtype.vsew + ara_req_i.eew_vs2);
                 active_vs2[i] = i == 0 || (!lmul_vs2[2] && (1 << lmul_vs2) > i);
                 for(int vec_id = 0; vec_id < NrVInsn; ++vec_id) begin
                   global_hazard_table_d[vinsn_id_n][vec_id][H_VS2] |=

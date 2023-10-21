@@ -509,11 +509,11 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           // Load indexed
           // We round up vl to multiple of 8*NrLanes >> sew, but there is no need to
           // round down vstart.
-          assign total_index_bytes = pe_req.vl << pe_req.eew_vs2;
-          assign ceil_vl = total_index_bytes[$clog2(8*NrLanes)-1:0] == 0 ?
+          total_index_bytes = pe_req.vl << pe_req.eew_vs2;
+          ceil_vl = total_index_bytes[$clog2(8*NrLanes)-1:0] == 0 ?
             (pe_req.vl >> $clog2(NrLanes)) : 
             ((total_index_bytes >> $clog2(8*NrLanes)) + 1) << (EW64 - pe_req.eew_vs2);
-          assign floor_vstart = pe_req.vstart >> $clog2(NrLanes);
+          floor_vstart = pe_req.vstart >> $clog2(NrLanes);
           operand_request_i[SlideAddrGenA] = '{
             id       : pe_req.id,
             vs       : pe_req.vs2,
@@ -562,10 +562,10 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           //if (operand_request_i[StA].vl * NrLanes != pe_req.vl) operand_request_i[StA].vl += 1;
           operand_request_push[StA] = pe_req.use_vs1;
 
-          assign ceil_mask_vl = pe_req.vl[$clog2(64*NrLanes)-1:0] == 0 ?
+          ceil_mask_vl = pe_req.vl[$clog2(64*NrLanes)-1:0] == 0 ?
             (pe_req.vl >> $clog2(8*NrLanes)) >> pe_req.vtype.vsew:
             ((pe_req.vl >> $clog2(64*NrLanes)) + 1) << (EW64 - pe_req.vtype.vsew);
-          assign floor_mask_vstart = (pe_req.vstart >> $clog2(8*NrLanes)) >> pe_req.vtype.vsew;
+          floor_mask_vstart = (pe_req.vstart >> $clog2(8*NrLanes)) >> pe_req.vtype.vsew;
 
           // This vector instruction uses masks
           operand_request_i[MaskM] = '{
@@ -582,10 +582,10 @@ module lane_sequencer import ara_pkg::*; import rvv_pkg::*; import cf_math_pkg::
           };
           operand_request_push[MaskM] = !pe_req.vm;
 
-          assign ceil_idx_vl = total_index_bytes[$clog2(8*NrLanes)-1:0] == 0 ?
+          ceil_idx_vl = total_index_bytes[$clog2(8*NrLanes)-1:0] == 0 ?
             pe_req.vl >> $clog2(NrLanes) :
             ((total_index_bytes >> $clog2(8*NrLanes)) + 1) << (EW64 - pe_req.eew_vs2);
-          assign floor_idx_vstart = pe_req.vstart >> $clog2(NrLanes);
+          floor_idx_vstart = pe_req.vstart >> $clog2(NrLanes);
 
           // Store indexed
           operand_request_i[SlideAddrGenA] = '{
