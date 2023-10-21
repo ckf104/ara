@@ -25,7 +25,7 @@ package ara_pkg;
   localparam int unsigned MAXVL = VLEN; // SEW = EW8, LMUL = 8. VL = 8 * VLEN / 8 = VLEN.
 
   // Number of vector instructions that can run in parallel.
-  localparam int unsigned NrVInsn = 8;
+  localparam int unsigned NrVInsn = 4;
 
   // Maximum number of lanes that Ara can support.
   localparam int unsigned MaxNrLanes = 16;

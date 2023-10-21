@@ -16,15 +16,16 @@ add_files -norecurse -fileset [current_fileset] [list \
 add_files -norecurse -fileset [current_fileset] [list \
     $ROOT/hardware/deps/common_cells/src/binary_to_gray.sv \
     $ROOT/hardware/deps/common_cells/src/cb_filter_pkg.sv \
-    $ROOT/hardware/deps/common_cells/src/cdc_2phase.sv \
+    $ROOT/hardware/deps/common_cells/src/cc_onehot.sv \
     $ROOT/hardware/deps/common_cells/src/cf_math_pkg.sv \
-    $ROOT/hardware/deps/common_cells/src/clk_div.sv \
+    $ROOT/hardware/deps/common_cells/src/clk_int_div.sv \
     $ROOT/hardware/deps/common_cells/src/delta_counter.sv \
     $ROOT/hardware/deps/common_cells/src/ecc_pkg.sv \
     $ROOT/hardware/deps/common_cells/src/edge_propagator_tx.sv \
     $ROOT/hardware/deps/common_cells/src/exp_backoff.sv \
     $ROOT/hardware/deps/common_cells/src/fifo_v3.sv \
     $ROOT/hardware/deps/common_cells/src/gray_to_binary.sv \
+    $ROOT/hardware/deps/common_cells/src/isochronous_4phase_handshake.sv \
     $ROOT/hardware/deps/common_cells/src/isochronous_spill_register.sv \
     $ROOT/hardware/deps/common_cells/src/lfsr.sv \
     $ROOT/hardware/deps/common_cells/src/lfsr_16bit.sv \
@@ -48,6 +49,9 @@ add_files -norecurse -fileset [current_fileset] [list \
     $ROOT/hardware/deps/common_cells/src/sync.sv \
     $ROOT/hardware/deps/common_cells/src/sync_wedge.sv \
     $ROOT/hardware/deps/common_cells/src/unread.sv \
+    $ROOT/hardware/deps/common_cells/src/cdc_reset_ctrlr_pkg.sv \
+    $ROOT/hardware/deps/common_cells/src/cdc_2phase.sv \
+    $ROOT/hardware/deps/common_cells/src/cdc_4phase.sv \
     $ROOT/hardware/deps/common_cells/src/addr_decode.sv \
     $ROOT/hardware/deps/common_cells/src/cb_filter.sv \
     $ROOT/hardware/deps/common_cells/src/cdc_fifo_2phase.sv \
@@ -62,6 +66,7 @@ add_files -norecurse -fileset [current_fileset] [list \
     $ROOT/hardware/deps/common_cells/src/stream_delay.sv \
     $ROOT/hardware/deps/common_cells/src/stream_fifo.sv \
     $ROOT/hardware/deps/common_cells/src/stream_fork_dynamic.sv \
+    $ROOT/hardware/deps/common_cells/src/cdc_reset_ctrlr.sv \
     $ROOT/hardware/deps/common_cells/src/cdc_fifo_gray.sv \
     $ROOT/hardware/deps/common_cells/src/fall_through_register.sv \
     $ROOT/hardware/deps/common_cells/src/id_queue.sv \
@@ -69,6 +74,8 @@ add_files -norecurse -fileset [current_fileset] [list \
     $ROOT/hardware/deps/common_cells/src/stream_arbiter_flushable.sv \
     $ROOT/hardware/deps/common_cells/src/stream_register.sv \
     $ROOT/hardware/deps/common_cells/src/stream_xbar.sv \
+    $ROOT/hardware/deps/common_cells/src/cdc_fifo_gray_clearable.sv \
+    $ROOT/hardware/deps/common_cells/src/cdc_2phase_clearable.sv \
     $ROOT/hardware/deps/common_cells/src/stream_arbiter.sv \
     $ROOT/hardware/deps/common_cells/src/stream_omega_net.sv \
     $ROOT/hardware/deps/common_cells/src/deprecated/clock_divider_counter.sv \
@@ -82,6 +89,7 @@ add_files -norecurse -fileset [current_fileset] [list \
     $ROOT/hardware/deps/common_cells/src/deprecated/clock_divider.sv \
     $ROOT/hardware/deps/common_cells/src/deprecated/fifo_v2.sv \
     $ROOT/hardware/deps/common_cells/src/deprecated/fifo_v1.sv \
+    $ROOT/hardware/deps/common_cells/src/edge_propagator_ack.sv \
     $ROOT/hardware/deps/common_cells/src/edge_propagator.sv \
     $ROOT/hardware/deps/common_cells/src/edge_propagator_rx.sv \
 ]
@@ -330,10 +338,10 @@ add_files -norecurse -fileset [current_fileset] [list \
     $ROOT/hardware/deps/apb_uart/src/reg_uart_wrap.sv \
 ]
 add_files -norecurse -fileset [current_fileset] [list \
-    $ROOT/hardware/deps/cva6/corev_apu/rv_plic/rtl/rv_plic_target.sv \
-    $ROOT/hardware/deps/cva6/corev_apu/rv_plic/rtl/rv_plic_gateway.sv \
-    $ROOT/hardware/deps/cva6/corev_apu/rv_plic/rtl/plic_regmap.sv \
-    $ROOT/hardware/deps/cva6/corev_apu/rv_plic/rtl/plic_top.sv \
+    $ROOT/hardware/deps/rv_plic/rtl/rv_plic_target.sv \
+    $ROOT/hardware/deps/rv_plic/rtl/rv_plic_gateway.sv \
+    $ROOT/hardware/deps/rv_plic/rtl/plic_regmap.sv \
+    $ROOT/hardware/deps/rv_plic/rtl/plic_top.sv \
 ]
 add_files -norecurse -fileset [current_fileset] [list \
     $ROOT/hardware/include/rvv_pkg.sv \

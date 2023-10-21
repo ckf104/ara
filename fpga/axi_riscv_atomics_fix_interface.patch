@@ -1,0 +1,15 @@
+diff --git a/src/axi_riscv_atomics.sv b/src/axi_riscv_atomics.sv
+index 12ad0fb..a7d1424 100644
+--- a/src/axi_riscv_atomics.sv
++++ b/src/axi_riscv_atomics.sv
+@@ -417,8 +417,8 @@ module axi_riscv_atomics
+         .b_chan_t   ( int_axi_b_chan_t  ),
+         .ar_chan_t  ( int_axi_ar_chan_t ),
+         .r_chan_t   ( int_axi_r_chan_t  ),
+-        .axi_req_t  ( int_axi_req_t     ),
+-        .axi_resp_t ( int_axi_resp_t    )
++        .req_t      ( int_axi_req_t     ),
++        .resp_t     ( int_axi_resp_t    )
+     ) i_axi_wide_in_cut (
+         .clk_i      ( clk_i           ),
+         .rst_ni     ( rst_ni          ),

@@ -1222,7 +1222,9 @@ module xilinx_ara_soc import axi_pkg::*; import ara_pkg::*; #(
   plic_top #(
     .N_SOURCE    ( NumSources  ),
     .N_TARGET    ( NumTargets  ),
-    .MAX_PRIO    ( MaxPriority )
+    .MAX_PRIO    ( MaxPriority ),
+    .reg_req_t   ( plic_req_t  ),
+    .reg_rsp_t   ( plic_rsp_t  )
   ) i_plic (
     .clk_i,
     .rst_ni        (ndmreset_n   ),
