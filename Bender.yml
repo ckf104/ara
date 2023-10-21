@@ -80,6 +80,8 @@ sources:
       files:
         # Level 1
         - hardware/tb/ara_testharness.sv
+        - fpga/src/xilinx_ara_soc_sim.sv
+        - hardware/deps/cva6/corev_apu/fpga/src/bootrom/bootrom_64.sv
         # Level 2
         - hardware/tb/ara_tb.sv
         # Level 3
