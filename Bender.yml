@@ -13,6 +13,15 @@ dependencies:
   cva6:               { git: "https://github.com/pulp-platform/cva6.git",               rev: acc_port_rerebase   }
   tech_cells_generic: { git: "https://github.com/pulp-platform/tech_cells_generic.git", version: 0.2.1  }
   apb:                { git: "https://github.com/pulp-platform/apb.git",                version: 0.2.4  }
+  register_interface: { git: "https://github.com/pulp-platform/register_interface",     version: 0.4.2  }
+  riscv_dbg:          { git: "https://github.com/pulp-platform/riscv-dbg",              version: 0.8.0  }
+  axi_riscv_atomics:  { git: "https://github.com/pulp-platform/axi_riscv_atomics",      version: 0.8.2  }
+  axi2apb:            { git: "https://github.com/pulp-platform/axi2apb",                version: 0.1.2  }
+  apb_timer:          { git: "https://github.com/pulp-platform/apb_timer",              version: 0.1.0  }
+  rv_plic:            { git: "https://github.com/pulp-platform/rv_plic",                rev: master     }
+  axi_mem_if:         { git: "https://github.com/pulp-platform/axi_mem_if",             version: 0.2.1  }
+  apb_uart:           { git: "https://github.com/pulp-platform/apb_uart",               version: 0.2.1  }
+  axi_slice:          { git: "https://github.com/pulp-platform/axi_slice",              version: 1.1.4  }
 
 workspace:
   checkout_dir: "hardware/deps"
