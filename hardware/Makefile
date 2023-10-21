@@ -244,3 +244,9 @@ $(buildpath)/$(dpi_library)/ara_dpi.so: $(dpi)
 clean:
 	rm -rf $(buildpath)
 	rm -f bender
+
+fpga:
+	mkdir -p build/ara_fpga
+	cd build/ara_fpga && vivado -mode batch -source $(ARA_DIR)/fpga/scripts/run.tcl -tclargs $(ARA_DIR)
+fpga_clean:
+	rm -r build/ara_fpga
