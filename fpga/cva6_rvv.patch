@@ -19,18 +19,9 @@ index a2f32a62..738e938f 100644
                                                      | riscv::SSTATUS_MXR;
      // ---------------
 diff --git a/core/include/cv64a6_imafdcv_sv39_config_pkg.sv b/core/include/cv64a6_imafdcv_sv39_config_pkg.sv
-index 82e4675e..b51073c5 100644
+index 82e4675e..69e9d49a 100644
 --- a/core/include/cv64a6_imafdcv_sv39_config_pkg.sv
 +++ b/core/include/cv64a6_imafdcv_sv39_config_pkg.sv
-@@ -29,7 +29,7 @@ package cva6_config_pkg;
-     localparam CVA6ConfigBExtEn = 0;
-     localparam CVA6ConfigVExtEn = 1;
- 
--    localparam CVA6ConfigAxiIdWidth = 4;
-+    localparam CVA6ConfigAxiIdWidth = 3;
-     localparam CVA6ConfigAxiAddrWidth = 64;
-     localparam CVA6ConfigAxiDataWidth = 64;
-     localparam CVA6ConfigFetchUserEn = 0;
 @@ -66,7 +66,7 @@ package cva6_config_pkg;
      localparam CVA6ConfigBTBEntries = 32;
      localparam CVA6ConfigBHTEntries = 128;
@@ -103,7 +94,7 @@ index 5ad610d8..973667ea 100644
  CFLAGS = -O2 -ggdb  -march=rv32im -mabi=ilp32 -W -Wall -mcmodel=medany -mexplicit-relocs -fno-builtin
  endif
 diff --git a/corev_apu/fpga/src/bootrom/bootrom_64.h b/corev_apu/fpga/src/bootrom/bootrom_64.h
-index 303fa8f5..4b42e4cc 100644
+index 303fa8f5..855b5ae8 100644
 --- a/corev_apu/fpga/src/bootrom/bootrom_64.h
 +++ b/corev_apu/fpga/src/bootrom/bootrom_64.h
 @@ -1,6 +1,6 @@
@@ -114,11 +105,15 @@ index 303fa8f5..4b42e4cc 100644
  
  uint32_t reset_vec[reset_vec_size] = {
      0x00800913,
-@@ -10,7 +10,7 @@ uint32_t reset_vec[reset_vec_size] = {
+@@ -8,9 +8,9 @@ uint32_t reset_vec[reset_vec_size] = {
+     0x00000493,
+     0xf1402973,
      0x03249663,
-     0x0210011b,
-     0x01a11113,
+-    0x0210011b,
+-    0x01a11113,
 -    0x303000ef,
++    0x2010011b,
++    0x01611113,
 +    0x263000ef,
      0x020004b7,
      0x00100913,
@@ -293,7 +288,7 @@ index 303fa8f5..4b42e4cc 100644
      0x640260a2,
      0x0141853e,
      0x8de98082,
-@@ -402,334 +402,294 @@ uint32_t reset_vec[reset_vec_size] = {
+@@ -402,334 +402,291 @@ uint32_t reset_vec[reset_vec_size] = {
      0x0085179b,
      0x0085551b,
      0x17c28fc9,
@@ -749,15 +744,15 @@ index 303fa8f5..4b42e4cc 100644
 -    0xf0ef9e0d,
 -    0x84aac5bf,
 -    0x1517c929,
+-    0x05130000,
+-    0xf0efffa5,
+-    0x1517f56f,
 +    0xaf850513,
 +    0xf0ef2905,
 +    0x8493f82f,
 +    0x10e30804,
 +    0x1517f569,
      0x05130000,
--    0xf0efffa5,
--    0x1517f56f,
--    0x05130000,
 -    0xf0ef0065,
 -    0x8526f4af,
 -    0xfc6ff0ef,
@@ -786,12 +781,12 @@ index 303fa8f5..4b42e4cc 100644
 -    0x854af22f,
 -    0xf9eff0ef,
 +    0xb511aa25,
-+    0x00001517,
-+    0xb7050513,
-+    0xf24ff0ef,
      0x00001517,
 -    0xedc50513,
 -    0x1517bbf1,
++    0xb7050513,
++    0xf24ff0ef,
++    0x00001517,
 +    0xb7c50513,
 +    0xf18ff0ef,
 +    0xf0ef854a,
@@ -856,27 +851,23 @@ index 303fa8f5..4b42e4cc 100644
      0x00001517,
 -    0xdc450513,
 -    0xe38ff0ef,
+-    0x65a14505,
+-    0xf0ef057e,
+-    0xe909c6bf,
 +    0xa0c50513,
 +    0xed8ff0ef,
-     0x65a14505,
-     0xf0ef057e,
--    0xe909c6bf,
-+    0xe909d15f,
      0x0010041b,
      0x0597047e,
      0x85930000,
 -    0x84021ae5,
-+    0x840214e5,
++    0x840215a5,
      0x0000a001,
      0x00000000,
      0x00000000,
-@@ -747,30 +707,6 @@ uint32_t reset_vec[reset_vec_size] = {
+@@ -750,27 +707,6 @@ uint32_t reset_vec[reset_vec_size] = {
      0x00000000,
      0x00000000,
      0x00000000,
--    0x00000000,
--    0x00000000,
--    0x00000000,
 -    0x00000000,
 -    0x00000000,
 -    0x00000000,
@@ -1147,7 +1138,7 @@ index 303fa8f5..4b42e4cc 100644
      0x04000000,
      0x01000000,
      0x40636d6d,
-@@ -1291,131 +1196,18 @@ uint32_t reset_vec[reset_vec_size] = {
+@@ -1291,130 +1196,17 @@ uint32_t reset_vec[reset_vec_size] = {
      0x00000000,
      0x03000000,
      0x04000000,
@@ -1163,9 +1154,8 @@ index 303fa8f5..4b42e4cc 100644
      0x03000000,
      0x00000000,
 -    0xe8010000,
-+    0xb5010000,
-     0x02000000,
-     0x02000000,
+-    0x02000000,
+-    0x02000000,
 -    0x01000000,
 -    0x72776f6c,
 -    0x2d637369,
@@ -1205,7 +1195,8 @@ index 303fa8f5..4b42e4cc 100644
 -    0x00000030,
 -    0x00000000,
 -    0x00800000,
--    0x02000000,
++    0xb5010000,
+     0x02000000,
 -    0x01000000,
 -    0x6f697067,
 -    0x30303440,
@@ -1278,10 +1269,9 @@ index 303fa8f5..4b42e4cc 100644
 -    0x04000000,
 -    0xb5000000,
 -    0x01000000,
--    0x02000000,
      0x02000000,
      0x02000000,
-     0x09000000,
+     0x02000000,
 @@ -1466,141 +1258,71 @@ uint32_t reset_vec[reset_vec_size] = {
      0x72656c6c,
      0x61687000,
@@ -1483,7 +1473,7 @@ index 303fa8f5..4b42e4cc 100644
      0x6f57206f,
      0x21646c72,
 diff --git a/corev_apu/fpga/src/bootrom/bootrom_64.sv b/corev_apu/fpga/src/bootrom/bootrom_64.sv
-index 3e25cf85..4b26f818 100644
+index 3e25cf85..37321097 100644
 --- a/corev_apu/fpga/src/bootrom/bootrom_64.sv
 +++ b/corev_apu/fpga/src/bootrom/bootrom_64.sv
 @@ -20,7 +20,7 @@ module bootrom_64 (
@@ -1799,21 +1789,21 @@ index 3e25cf85..4b26f818 100644
          64'h01000000_02000000,
 -        64'h03000000_b5000000,
 +        64'h04000000_34010000,
++        64'h04000000_03000000,
++        64'h02000000_2a010000,
++        64'h04000000_03000000,
++        64'h01000000_1f010000,
++        64'h04000000_03000000,
++        64'h02000000_0e010000,
          64'h04000000_03000000,
 -        64'h1e000000_28010000,
-+        64'h02000000_2a010000,
++        64'h00c20100_00010000,
          64'h04000000_03000000,
 -        64'h07000000_15010000,
-+        64'h01000000_1f010000,
++        64'h80f0fa02_4b000000,
          64'h04000000_03000000,
 -        64'h00000004_00000000,
 -        64'h0000000c_00000000,
-+        64'h02000000_0e010000,
-+        64'h04000000_03000000,
-+        64'h00c20100_00010000,
-+        64'h04000000_03000000,
-+        64'h80f0fa02_4b000000,
-+        64'h04000000_03000000,
 +        64'h00100000_00000000,
 +        64'h00000010_00000000,
          64'h67000000_10000000,
@@ -1827,9 +1817,9 @@ index 3e25cf85..4b26f818 100644
 -        64'h1b000000_0c000000,
 -        64'h03000000_01000000,
 -        64'h8f000000_04000000,
--        64'h03000000_00000000,
--        64'h00000000_04000000,
          64'h03000000_00000000,
+-        64'h00000000_04000000,
+-        64'h03000000_00000000,
 -        64'h30303030_30306340,
 -        64'h72656c6c_6f72746e,
 -        64'h6f632d74_70757272,
@@ -1970,11 +1960,10 @@ index 3e25cf85..4b26f818 100644
          64'h00000000_00000000,
          64'h00000000_00000000,
          64'h00000000_00000000,
-@@ -542,201 +435,169 @@ module bootrom_64 (
+@@ -543,200 +436,168 @@ module bootrom_64 (
          64'h00000000_00000000,
          64'h00000000_00000000,
          64'h00000000_00000000,
--        64'h00000000_00000000,
 -        64'h00000000_00000000,
 -        64'h00000000_00000000,
 -        64'h00000000_00000000,
@@ -1987,13 +1976,14 @@ index 3e25cf85..4b26f818 100644
 -        64'h00000000_00000000,
 -        64'h00000000_00000000,
 -        64'h0000a001_84021ae5,
-+        64'h0000a001_840214e5,
-         64'h85930000_0597047e,
+-        64'h85930000_0597047e,
 -        64'h0010041b_e909c6bf,
-+        64'h0010041b_e909d15f,
-         64'hf0ef057e_65a14505,
+-        64'hf0ef057e_65a14505,
 -        64'he38ff0ef_dc450513,
 -        64'h00001517_e00ff0ef,
++        64'h00000000_0000a001,
++        64'h840215a5_85930000,
++        64'h0597047e_0010041b,
 +        64'hed8ff0ef_a0c50513,
 +        64'h00001517_ea0ff0ef,
          64'he4060805_05132005,
@@ -2420,15 +2410,17 @@ index 3e25cf85..4b26f818 100644
          64'h00001597_f1402573,
          64'hff24c6e3_4009091b,
          64'h02000937_00448493,
-@@ -914,7 +775,7 @@ module bootrom_64 (
+@@ -914,8 +775,8 @@ module bootrom_64 (
          64'h4009091b_02000937,
          64'h00448493_0124a023,
          64'h00100913_020004b7,
 -        64'h303000ef_01a11113,
-+        64'h263000ef_01a11113,
-         64'h0210011b_03249663,
+-        64'h0210011b_03249663,
++        64'h263000ef_01611113,
++        64'h2010011b_03249663,
          64'hf1402973_00000493,
          64'h30491073_00800913
+     };
 diff --git a/corev_apu/fpga/src/bootrom/cv64a6.dts b/corev_apu/fpga/src/bootrom/cv64a6.dts
 index 52ae47bb..793153bc 100644
 --- a/corev_apu/fpga/src/bootrom/cv64a6.dts
@@ -2487,3 +2479,30 @@ index 52ae47bb..793153bc 100644
 -    };
    };
  };
+diff --git a/corev_apu/fpga/src/bootrom/src/main.c b/corev_apu/fpga/src/bootrom/src/main.c
+index 316792b2..0f5e78bd 100644
+--- a/corev_apu/fpga/src/bootrom/src/main.c
++++ b/corev_apu/fpga/src/bootrom/src/main.c
+@@ -8,7 +8,8 @@ int main()
+     init_uart(50000000, 115200);
+     print_uart("Hello World!\r\n");
+ 
+-    int res = gpt_find_boot_partition((uint8_t *)0x80000000UL, 2 * 16384);
++    // int res = gpt_find_boot_partition((uint8_t *)0x80000000UL, 2 * 16384);
++    int res = 0;
+ 
+     if (res == 0)
+     {
+diff --git a/corev_apu/fpga/src/bootrom/startup.S b/corev_apu/fpga/src/bootrom/startup.S
+index 7a9d70e8..45d9528b 100644
+--- a/corev_apu/fpga/src/bootrom/startup.S
++++ b/corev_apu/fpga/src/bootrom/startup.S
+@@ -9,7 +9,7 @@
+   .globl _prog_start
+ _prog_start:
+   smp_pause(s1, s2)
+-  li sp, 0x84000000
++  li sp, 0x80400000
+   call main
+   smp_resume(s1, s2)
+   csrr a0, mhartid

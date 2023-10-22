@@ -81,6 +81,8 @@ void rvtest_init(void) {
   uint64_t* secondary_page = (uint64_t*)secondary_table_addr;
 
   for(int i=0; i<512; ++i) top_page[i] = 0;
+  // for new uart addr
+  top_page[0] = U_bit | V_bit | ((0UL >> 12) << 10) | RWX_bit | A_bit | D_bit;
   // Only the second entry in top page is valid
   top_page[2] = U_bit | V_bit | ((secondary_table_addr >> 12) << 10);
   // the third entry used for IO device

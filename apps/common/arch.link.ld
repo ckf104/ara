@@ -57,5 +57,5 @@ SECTIONS {
   event_trigger          = 0xD0000018;
   hw_cnt_en_reg          = 0xD0000020;
 
-  fake_uart              = 0xC0000000;
+  fake_uart              = 0x10000000;
 }

@@ -30,7 +30,7 @@ module xilinx_ara_soc_sim import axi_pkg::*; import ara_pkg::*; #(
     parameter  int           unsigned AxiUserWidth = 1,
     parameter  int           unsigned AxiIdWidth   = 5,
     // Main memory
-    parameter  int           unsigned L2NumWords   = 2**15,
+    parameter  int           unsigned L2NumWords   = 2**20,
     // Dependant parameters. DO NOT CHANGE!
     localparam type                   axi_data_t   = logic [AxiDataWidth-1:0],
     localparam type                   axi_strb_t   = logic [AxiDataWidth/8-1:0],
@@ -108,7 +108,7 @@ module xilinx_ara_soc_sim import axi_pkg::*; import ara_pkg::*; #(
 
   typedef enum logic [63:0] {
     DRAMBase = 64'h8000_0000,
-    UARTBase = 64'hC000_0000,
+    UARTBase = 64'h1000_0000,
     CTRLBase = 64'hD000_0000,
     ROMBase  = 64'h0001_0000
   } soc_bus_start_e;
@@ -554,7 +554,7 @@ module xilinx_ara_soc_sim import axi_pkg::*; import ara_pkg::*; #(
   ) i_system (
     .clk_i             (clk_i                    ),
     .rst_ni            (rst_ni                   ),
-    .boot_addr_i       (DRAMBase                 ), // start fetching from DRAM
+    .boot_addr_i       (ROMBase                  ), // start fetching from DRAM
     .hart_id_i         (hart_id                  ),
     .ariane_irq_i      ('b0                      ),
     .ariane_ipi_i      ('b0                      ),
@@ -590,8 +590,8 @@ module xilinx_ara_soc_sim import axi_pkg::*; import ara_pkg::*; #(
     .axi_slv_req_t      (soc_wide_req_t       ),
     .axi_slv_resp_t     (soc_wide_resp_t      )
   ) i_axi_slave_rom_dwc (
-    .clk_i     (clk_i                       ),
-    .rst_ni    (ndmreset_n                 ),
+    .clk_i     (clk_i                      ),
+    .rst_ni    (rst_ni                     ),
     .slv_req_i (periph_wide_axi_req[ROM]   ),
     .slv_resp_o(periph_wide_axi_resp[ROM]  ),
     .mst_req_o (periph_narrow_axi_req[ROM] ),
@@ -615,7 +615,7 @@ module xilinx_ara_soc_sim import axi_pkg::*; import ara_pkg::*; #(
     .AXI_USER_WIDTH ( AxiUserWidth       )
   ) i_axi2rom (
     .clk_i  ( clk_i       ),
-    .rst_ni ( ndmreset_n  ),
+    .rst_ni ( rst_ni      ),
     .slave  ( mem_bus     ),
     .req_o  ( rom_req     ),
     .we_o   (             ),
